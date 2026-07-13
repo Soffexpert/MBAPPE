@@ -57,7 +57,7 @@ export async function createEmbeddedCheckoutSession({ cartItems }) {
 
   const returnUrl =
     process.env.SUCCESS_URL ||
-    'https://www.soffexpert.se?session_id={CHECKOUT_SESSION_ID}';
+    'https://www.soffexpert.se/pages/tack-for-din-bestallning?session_id={CHECKOUT_SESSION_ID}';
 
   const session = await stripe.checkout.sessions.create({
     ui_mode: 'embedded',
