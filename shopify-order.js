@@ -1,4 +1,5 @@
 import { getShopifyAccessToken } from './shopify-auth.js';
+import { getAdminStoreHost } from './shopify-store.js';
 
 function formatMoney(amount) {
   return Number(amount).toFixed(2);
@@ -116,7 +117,8 @@ export async function createShopifyOrderFromSession(stripe, session) {
     orderPayload.order.billing_address = shippingAddress;
   }
 
-  const response = await fetch(`https://${store}/admin/api/2025-01/orders.json`, {
+  const adminStore = getAdminStoreHost(store);
+  const response = await fetch(`https://${adminStore}/admin/api/2025-01/orders.json`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
