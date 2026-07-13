@@ -3,9 +3,9 @@ import Stripe from 'stripe';
 import {
   createEmbeddedCheckoutSession,
   updateCheckoutShipping,
-} from './stripe-checkout.js';
-import { createShopifyOrderFromSession } from './shopify-order.js';
-import { completeOrderFromStripeSession } from './order-complete.js';
+} from './lib/stripe-checkout.js';
+import { createShopifyOrderFromSession } from './lib/shopify-order.js';
+import { completeOrderFromStripeSession } from './lib/order-complete.js';
 
 const PORT = process.env.PORT || 3000;
 
@@ -44,6 +44,7 @@ async function handleCreateSession(req, res) {
     const body = await readJson(req);
     const session = await createEmbeddedCheckoutSession({
       cartItems: mapCartItems(body),
+      returnUrl: body.return_url || body.returnUrl,
     });
 
     sendJson(res, 200, {
