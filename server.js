@@ -3,8 +3,9 @@ import Stripe from 'stripe';
 import {
   createEmbeddedCheckoutSession,
   updateCheckoutShipping,
-} from './stripe-checkout.js';
-import { createShopifyOrderFromSession } from './shopify-order.js';
+} from './lib/stripe-checkout.js';
+import { createShopifyOrderFromSession } from './lib/shopify-order.js';
+import { completeOrderFromStripeSession } from './lib/order-complete.js';
 
 const PORT = process.env.PORT || 3000;
 
@@ -116,8 +117,20 @@ async function handleWebhook(req, res) {
 
   if (event.type === 'checkout.session.completed') {
     try {
-      const order = await createShopifyOrderFromSession(stripe, event.data.object);
-      console.log('Shopify order created:', order.name || order.id);
+      const session = event.data.object;
+      if (!session.metadata?.shopify_order_id) {
+        const order = await createShopifyOrderFromSession(stripe, session);
+        await stripe.checkout.sessions.update(session.id, {
+          metadata: {
+            ...session.metadata,
+            shopify_order_id: String(order.id),
+            shopify_order_name: order.name || '',
+          },
+        });
+        console.log('Shopify order created:', order.name || order.id);
+      } else {
+        console.log('Shopify order already exists:', session.metadata.shopify_order_name);
+      }
     } catch (error) {
       console.error('Shopify order failed:', error);
       res.writeHead(500);
@@ -128,6 +141,20 @@ async function handleWebhook(req, res) {
 
   res.writeHead(200);
   res.end('ok');
+}
+
+async function handleCompleteOrder(req, res) {
+  try {
+    const body = await readJson(req);
+    const sessionId =
+      body.session_id || body.sessionId || new URL(req.url, 'http://x').searchParams.get('session_id');
+
+    const result = await completeOrderFromStripeSession(sessionId);
+    sendJson(res, 200, result);
+  } catch (error) {
+    console.error('complete-order:', error);
+    sendJson(res, 400, { error: error.message || 'Kunde inte slutföra ordern.' });
+  }
 }
 
 function handleConfig(res) {
@@ -159,6 +186,11 @@ const server = http.createServer(async (req, res) => {
 
   if (req.method === 'POST' && path === '/webhook') {
     await handleWebhook(req, res);
+    return;
+  }
+
+  if (req.method === 'POST' && path === '/complete-order') {
+    await handleCompleteOrder(req, res);
     return;
   }
 
