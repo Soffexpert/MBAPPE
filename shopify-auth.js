@@ -1,3 +1,5 @@
+import { getAdminStoreHost } from './shopify-store.js';
+
 const TOKEN_CACHE = {
   token: null,
   expiresAt: 0,
@@ -27,7 +29,7 @@ function getShopifyConfig() {
 }
 
 async function fetchAccessToken(store, clientId, clientSecret) {
-  const shop = store.replace(/^https?:\/\//, '').replace(/\/$/, '');
+  const shop = getAdminStoreHost(store);
   const response = await fetch(`https://${shop}/admin/oauth/access_token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
