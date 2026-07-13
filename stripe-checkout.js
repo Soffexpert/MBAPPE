@@ -51,13 +51,25 @@ export function buildProductLineItems(cartItems) {
   });
 }
 
-export async function createEmbeddedCheckoutSession({ cartItems }) {
+const THANK_YOU_RETURN_URL =
+  'https://www.soffexpert.se/pages/tack-for-din-bestallning?session_id={CHECKOUT_SESSION_ID}';
+
+function resolveReturnUrl(requestReturnUrl) {
+  if (requestReturnUrl) return requestReturnUrl;
+
+  const envUrl = process.env.SUCCESS_URL || '';
+  if (envUrl.includes('tack-for-din-bestallning')) {
+    return envUrl;
+  }
+
+  return THANK_YOU_RETURN_URL;
+}
+
+export async function createEmbeddedCheckoutSession({ cartItems, returnUrl }) {
   const stripe = getStripe();
   const lineItems = buildProductLineItems(cartItems);
 
-  const returnUrl =
-    process.env.SUCCESS_URL ||
-    'https://www.soffexpert.se/pages/tack-for-din-bestallning?session_id={CHECKOUT_SESSION_ID}';
+  const resolvedReturnUrl = resolveReturnUrl(returnUrl);
 
   const session = await stripe.checkout.sessions.create({
     ui_mode: 'embedded',
@@ -65,9 +77,9 @@ export async function createEmbeddedCheckoutSession({ cartItems }) {
     payment_method_types: ['card', 'klarna'],
     line_items: lineItems,
     locale: 'sv',
-    return_url: returnUrl.includes('{CHECKOUT_SESSION_ID}')
-      ? returnUrl
-      : `${returnUrl}${returnUrl.includes('?') ? '&' : '?'}session_id={CHECKOUT_SESSION_ID}`,
+    return_url: resolvedReturnUrl.includes('{CHECKOUT_SESSION_ID}')
+      ? resolvedReturnUrl
+      : `${resolvedReturnUrl}${resolvedReturnUrl.includes('?') ? '&' : '?'}session_id={CHECKOUT_SESSION_ID}`,
     shipping_address_collection: { allowed_countries: ['SE'] },
     phone_number_collection: { enabled: true },
     permissions: {
