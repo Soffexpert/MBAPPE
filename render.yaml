@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: soffexpert-stripe-api
+    runtime: node
+    buildCommand: npm install
+    startCommand: node server.js
+    healthCheckPath: /health
+    envVars:
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: SHOPIFY_STORE
+        value: soffexpert.se
+      - key: STRIPE_PUBLISHABLE_KEY
+        sync: false
+      - key: SHOPIFY_CLIENT_ID
+        sync: false
+      - key: SHOPIFY_CLIENT_SECRET
+        sync: false
+      - key: SUCCESS_URL
+        value: https://www.soffexpert.se
+      - key: CANCEL_URL
+        value: https://www.soffexpert.se/cart
