@@ -33,51 +33,91 @@ function getAddress(session) {
 
 function getShippingLabel(session) {
   const shippingCost = (session.total_details?.amount_shipping || 0) / 100;
-  if (shippingCost === 0) return 'Gratis leverans';
-  if (shippingCost >= 1500) return 'Leverans + inbärning (spårbar)';
-  if (shippingCost >= 800) return 'Leverans';
-  if (shippingCost >= 300) return 'Inbärning';
+  if (shippingCost === 0) return 'Hemleverans (EXPRESS)';
+  if (shippingCost >= 1500) return 'Hemleverans till tomtgräns (+inbärning)';
+  if (shippingCost >= 800) return 'Hemleverans till tomtgräns';
+  if (shippingCost >= 300) return 'Hemleverans + inbärning (EXPRESS)';
   return 'Frakt';
 }
 
-async function sendOrderConfirmationEmail(adminStore, token, orderId, email) {
-  if (!email) return;
+async function sendOrderConfirmationEmail(adminStore, token, orderId) {
+  const response = await fetch(`https://${adminStore}/admin/api/2025-01/graphql.json`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Shopify-Access-Token': token,
+    },
+    body: JSON.stringify({
+      query: `
+        mutation OrderSendConfirmationEmail($orderId: ID!) {
+          orderSendConfirmationEmail(id: $orderId) {
+            userErrors {
+              field
+              message
+            }
+          }
+        }
+      `,
+      variables: {
+        orderId: `gid://shopify/Order/${orderId}`,
+      },
+    }),
+  });
 
-  try {
-    const response = await fetch(`https://${adminStore}/admin/api/2025-01/graphql.json`, {
+  const result = await response.json();
+  const userErrors = result.data?.orderSendConfirmationEmail?.userErrors || [];
+
+  if (!response.ok || result.errors?.length || userErrors.length) {
+    throw new Error(JSON.stringify(result));
+  }
+}
+
+async function sendOrderInvoiceEmail(adminStore, token, orderId, email, orderName) {
+  const response = await fetch(
+    `https://${adminStore}/admin/api/2025-01/orders/${orderId}/send_invoice.json`,
+    {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'X-Shopify-Access-Token': token,
       },
       body: JSON.stringify({
-        query: `
-          mutation OrderSendConfirmationEmail($orderId: ID!) {
-            orderSendConfirmationEmail(id: $orderId) {
-              userErrors {
-                field
-                message
-              }
-            }
-          }
-        `,
-        variables: {
-          orderId: `gid://shopify/Order/${orderId}`,
+        order_invoice: {
+          to: email,
+          subject: `Orderbekräftelse ${orderName}`,
+          custom_message:
+            'Tack för din beställning hos SoffExpert! Här är en sammanfattning av din order.',
         },
       }),
-    });
-
-    const result = await response.json();
-    const userErrors = result.data?.orderSendConfirmationEmail?.userErrors || [];
-
-    if (!response.ok || result.errors?.length || userErrors.length) {
-      console.error('Order confirmation email failed:', JSON.stringify(result));
-      return;
     }
+  );
 
-    console.log('Order confirmation email sent for order', orderId);
+  const body = await response.json();
+  if (!response.ok) {
+    throw new Error(body.errors ? JSON.stringify(body.errors) : 'Kunde inte skicka orderfaktura.');
+  }
+}
+
+async function notifyCustomerAboutOrder(adminStore, token, order) {
+  const email = order.email || order.contact_email;
+  if (!email) {
+    console.error('Order confirmation skipped: order has no email.');
+    return;
+  }
+
+  try {
+    await sendOrderConfirmationEmail(adminStore, token, order.id);
+    console.log('Order confirmation email sent for order', order.id);
+    return;
   } catch (error) {
-    console.error('Order confirmation email error:', error.message);
+    console.error('Order confirmation email failed, trying invoice email:', error.message);
+  }
+
+  try {
+    await sendOrderInvoiceEmail(adminStore, token, order.id, email, order.name || `#${order.id}`);
+    console.log('Order invoice email sent for order', order.id);
+  } catch (error) {
+    console.error('Order invoice email failed:', error.message);
   }
 }
 
@@ -114,14 +154,15 @@ export async function createShopifyOrderFromSession(stripe, session) {
   const orderNote = getOrderNote(session);
   const shippingTotal = (session.total_details?.amount_shipping || 0) / 100;
   const shippingLabel = getShippingLabel(session);
+  const customerEmail = session.customer_details?.email;
 
   const orderPayload = {
     order: {
-      email: session.customer_details?.email,
+      email: customerEmail,
       phone: session.customer_details?.phone || undefined,
       financial_status: 'paid',
       send_receipt: true,
-      send_fulfillment_receipt: true,
+      source_name: 'web',
       note: [
         'Betald via Stripe Embedded Checkout (Klarna/kort).',
         orderNote ? `Kundanteckning: ${orderNote}` : '',
@@ -153,6 +194,18 @@ export async function createShopifyOrderFromSession(stripe, session) {
     },
   };
 
+  if (customerEmail) {
+    orderPayload.order.customer = {
+      email: customerEmail,
+      first_name: shippingAddress?.first_name || session.customer_details?.name?.split(/\s+/)[0] || '',
+      last_name:
+        shippingAddress?.last_name ||
+        session.customer_details?.name?.split(/\s+/).slice(1).join(' ') ||
+        '',
+      phone: session.customer_details?.phone || undefined,
+    };
+  }
+
   if (shippingAddress) {
     orderPayload.order.shipping_address = shippingAddress;
     orderPayload.order.billing_address = shippingAddress;
@@ -173,9 +226,7 @@ export async function createShopifyOrderFromSession(stripe, session) {
     throw new Error(body.errors ? JSON.stringify(body.errors) : 'Kunde inte skapa Shopify-order.');
   }
 
-  if (body.order.email) {
-    await sendOrderConfirmationEmail(adminStore, token, body.order.id, body.order.email);
-  }
+  await notifyCustomerAboutOrder(adminStore, token, body.order);
 
   return body.order;
 }
