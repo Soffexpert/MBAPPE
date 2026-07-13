@@ -3,8 +3,8 @@ import Stripe from 'stripe';
 import {
   createEmbeddedCheckoutSession,
   updateCheckoutShipping,
-} from './lib/stripe-checkout.js';
-import { createShopifyOrderFromSession } from './lib/shopify-order.js';
+} from './stripe-checkout.js';
+import { createShopifyOrderFromSession } from './shopify-order.js';
 
 const PORT = process.env.PORT || 3000;
 
