@@ -10,7 +10,7 @@ function isSkane(zipCode) {
   return zip >= 20000 && zip <= 29999;
 }
 
-function shippingOption(displayName, amountSek, carry) {
+function shippingOption(displayName, amountSek, carry, extraMetadata = {}) {
   return {
     shipping_rate_data: {
       type: 'fixed_amount',
@@ -22,6 +22,7 @@ function shippingOption(displayName, amountSek, carry) {
       metadata: {
         type: 'shipping',
         carry: carry ? 'true' : 'false',
+        ...extraMetadata,
       },
     },
   };
@@ -36,13 +37,13 @@ export function buildStripeShippingOptions(postalCode) {
 
   if (skane) {
     return [
-      shippingOption('Gratis leverans', 0, false),
-      shippingOption('Inbärning', 349, true),
+      shippingOption('Hemleverans (EXPRESS)', 0, false),
+      shippingOption('Hemleverans + inbärning (EXPRESS)', 349, true),
     ];
   }
 
   return [
-    shippingOption('Leverans', 899, false),
-    shippingOption('Leverans + inbärning (spårbar)', 1798, true),
+    shippingOption('Hemleverans till tomtgräns', 899, false, { carrier: 'dhl' }),
+    shippingOption('Hemleverans till tomtgräns (+inbärning)', 1798, true, { carrier: 'dhl' }),
   ];
 }
