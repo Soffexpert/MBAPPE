@@ -34,8 +34,8 @@ function getAddress(session) {
 function getShippingLabel(session) {
   const shippingCost = (session.total_details?.amount_shipping || 0) / 100;
   if (shippingCost === 0) return 'Hemleverans (EXPRESS)';
-  if (shippingCost >= 1500) return 'Hemleverans till tomtgräns (+inbärning)';
-  if (shippingCost >= 800) return 'Hemleverans till tomtgräns';
+  if (shippingCost >= 1500) return 'Hemleverans till tomtgräns (+inbärning) [DHL]';
+  if (shippingCost >= 800) return 'Hemleverans till tomtgräns [DHL]';
   if (shippingCost >= 300) return 'Hemleverans + inbärning (EXPRESS)';
   return 'Frakt';
 }
