@@ -40,6 +40,47 @@ function getShippingLabel(session) {
   return 'Frakt';
 }
 
+async function sendOrderConfirmationEmail(adminStore, token, orderId, email) {
+  if (!email) return;
+
+  try {
+    const response = await fetch(`https://${adminStore}/admin/api/2025-01/graphql.json`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Shopify-Access-Token': token,
+      },
+      body: JSON.stringify({
+        query: `
+          mutation OrderSendConfirmationEmail($orderId: ID!) {
+            orderSendConfirmationEmail(id: $orderId) {
+              userErrors {
+                field
+                message
+              }
+            }
+          }
+        `,
+        variables: {
+          orderId: `gid://shopify/Order/${orderId}`,
+        },
+      }),
+    });
+
+    const result = await response.json();
+    const userErrors = result.data?.orderSendConfirmationEmail?.userErrors || [];
+
+    if (!response.ok || result.errors?.length || userErrors.length) {
+      console.error('Order confirmation email failed:', JSON.stringify(result));
+      return;
+    }
+
+    console.log('Order confirmation email sent for order', orderId);
+  } catch (error) {
+    console.error('Order confirmation email error:', error.message);
+  }
+}
+
 export async function createShopifyOrderFromSession(stripe, session) {
   const { store, token } = await getShopifyAccessToken();
   const lineItemsResult = await stripe.checkout.sessions.listLineItems(session.id, {
@@ -130,6 +171,10 @@ export async function createShopifyOrderFromSession(stripe, session) {
   const body = await response.json();
   if (!response.ok) {
     throw new Error(body.errors ? JSON.stringify(body.errors) : 'Kunde inte skapa Shopify-order.');
+  }
+
+  if (body.order.email) {
+    await sendOrderConfirmationEmail(adminStore, token, body.order.id, body.order.email);
   }
 
   return body.order;
