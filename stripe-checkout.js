@@ -75,6 +75,7 @@ export async function createEmbeddedCheckoutSession({ cartItems, returnUrl }) {
     ui_mode: 'embedded',
     mode: 'payment',
     payment_method_types: ['card', 'klarna'],
+    allow_promotion_codes: true,
     line_items: lineItems,
     locale: 'sv',
     return_url: resolvedReturnUrl.includes('{CHECKOUT_SESSION_ID}')
