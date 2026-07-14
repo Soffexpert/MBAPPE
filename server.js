@@ -43,9 +43,11 @@ function mapCartItems(body) {
 async function handleCreateSession(req, res) {
   try {
     const body = await readJson(req);
+    const promotionCode = body.promotion_code || body.promotionCode || '';
     const session = await createEmbeddedCheckoutSession({
       cartItems: mapCartItems(body),
       returnUrl: body.return_url || body.returnUrl,
+      promotionCode: promotionCode || undefined,
     });
 
     sendJson(res, 200, {
