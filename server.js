@@ -3,9 +3,10 @@ import Stripe from 'stripe';
 import {
   createEmbeddedCheckoutSession,
   updateCheckoutShipping,
-} from './stripe-checkout.js';
-import { createShopifyOrderFromSession } from './shopify-order.js';
-import { completeOrderFromStripeSession } from './order-complete.js';
+} from './lib/stripe-checkout.js';
+import { createShopifyOrderFromSession } from './lib/shopify-order.js';
+import { completeOrderFromStripeSession } from './lib/order-complete.js';
+import { handleSellSofa } from './lib/sell-sofa.js';
 
 const PORT = process.env.PORT || 3000;
 
@@ -13,7 +14,7 @@ function sendJson(res, status, payload) {
   res.writeHead(status, {
     'Content-Type': 'application/json',
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Headers': 'Content-Type, Accept',
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   });
   res.end(JSON.stringify(payload));
@@ -144,6 +145,20 @@ async function handleWebhook(req, res) {
   res.end('ok');
 }
 
+async function handleSellSofaRequest(req, res) {
+  try {
+    const result = await handleSellSofa(req);
+    if (result.error) {
+      sendJson(res, 400, { error: result.error });
+      return;
+    }
+    sendJson(res, 200, { success: true });
+  } catch (error) {
+    console.error('sell-sofa:', error);
+    sendJson(res, 500, { error: error.message || 'Kunde inte skicka förfrågan.' });
+  }
+}
+
 async function handleCompleteOrder(req, res) {
   try {
     const body = await readJson(req);
@@ -192,6 +207,11 @@ const server = http.createServer(async (req, res) => {
 
   if (req.method === 'POST' && path === '/complete-order') {
     await handleCompleteOrder(req, res);
+    return;
+  }
+
+  if (req.method === 'POST' && path === '/sell-sofa') {
+    await handleSellSofaRequest(req, res);
     return;
   }
 
