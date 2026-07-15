@@ -56,6 +56,7 @@ async function handleCreateSession(req, res) {
 
     sendJson(res, 200, {
       clientSecret: session.client_secret,
+      sessionId: session.id,
     });
   } catch (error) {
     console.error('create-checkout-session:', error);
@@ -124,11 +125,11 @@ async function handleWebhook(req, res) {
     return;
   }
 
-  if (event.type === 'checkout.session.updated') {
+  if (event.type === 'checkout.session.expired') {
     try {
       await syncAbandonedCheckoutFromStripeSession(event.data.object);
     } catch (error) {
-      console.error('abandoned checkout sync:', error.message);
+      console.error('abandoned checkout sync (expired):', error.message);
     }
   }
 
@@ -159,6 +160,35 @@ async function handleWebhook(req, res) {
 
   res.writeHead(200);
   res.end('ok');
+}
+
+async function handleSyncAbandonedCheckout(req, res) {
+  try {
+    const body = await readJson(req);
+    const sessionId = body.checkout_session_id || body.checkoutSessionId || body.session_id;
+    if (!sessionId) {
+      sendJson(res, 400, { error: 'Saknar checkout_session_id.' });
+      return;
+    }
+
+    const stripeKey = process.env.STRIPE_SECRET_KEY;
+    if (!stripeKey) {
+      sendJson(res, 500, { error: 'STRIPE_SECRET_KEY saknas.' });
+      return;
+    }
+
+    const stripe = new Stripe(stripeKey);
+    const session = await stripe.checkout.sessions.retrieve(sessionId);
+    const checkout = await syncAbandonedCheckoutFromStripeSession(session);
+
+    sendJson(res, 200, {
+      synced: Boolean(checkout),
+      email: session.customer_details?.email || null,
+    });
+  } catch (error) {
+    console.error('sync-abandoned-checkout:', error);
+    sendJson(res, 400, { error: error.message || 'Kunde inte synka övergiven checkout.' });
+  }
 }
 
 async function handleSellSofaRequest(req, res) {
@@ -223,6 +253,11 @@ const server = http.createServer(async (req, res) => {
 
   if (req.method === 'POST' && path === '/complete-order') {
     await handleCompleteOrder(req, res);
+    return;
+  }
+
+  if (req.method === 'POST' && path === '/sync-abandoned-checkout') {
+    await handleSyncAbandonedCheckout(req, res);
     return;
   }
 
