@@ -6,7 +6,11 @@ import {
 } from './stripe-checkout.js';
 import { createShopifyOrderFromSession } from './shopify-order.js';
 import { completeOrderFromStripeSession } from './order-complete.js';
-import { handleSellSofa } from './sell-sofa.js';
+import { handleSellSofa, getSellSofaMailStatus } from './sell-sofa.js';
+import {
+  syncAbandonedCheckoutFromStripeSession,
+  closeAbandonedCheckout,
+} from './shopify-abandoned-checkout.js';
 
 const PORT = process.env.PORT || 3000;
 
@@ -43,12 +47,11 @@ function mapCartItems(body) {
 async function handleCreateSession(req, res) {
   try {
     const body = await readJson(req);
-    const promotionCode = body.promotion_code || body.promotionCode || '';
     const session = await createEmbeddedCheckoutSession({
       cartItems: mapCartItems(body),
       returnUrl: body.return_url || body.returnUrl,
       market: body.market || body.locale || 'sv',
-      promotionCode: promotionCode || undefined,
+      cartToken: body.cart_token || body.cartToken || '',
     });
 
     sendJson(res, 200, {
@@ -121,6 +124,14 @@ async function handleWebhook(req, res) {
     return;
   }
 
+  if (event.type === 'checkout.session.updated') {
+    try {
+      await syncAbandonedCheckoutFromStripeSession(event.data.object);
+    } catch (error) {
+      console.error('abandoned checkout sync:', error.message);
+    }
+  }
+
   if (event.type === 'checkout.session.completed') {
     try {
       const session = event.data.object;
@@ -133,6 +144,7 @@ async function handleWebhook(req, res) {
             shopify_order_name: order.name || '',
           },
         });
+        await closeAbandonedCheckout(session.metadata?.shopify_checkout_token);
         console.log('Shopify order created:', order.name || order.id);
       } else {
         console.log('Shopify order already exists:', session.metadata.shopify_order_name);
@@ -225,7 +237,10 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (req.method === 'GET' && path === '/health') {
-    sendJson(res, 200, { ok: true });
+    sendJson(res, 200, {
+      ok: true,
+      sellSofaMail: getSellSofaMailStatus(),
+    });
     return;
   }
 
