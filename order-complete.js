@@ -1,5 +1,6 @@
 import Stripe from 'stripe';
 import { createShopifyOrderFromSession } from './shopify-order.js';
+import { closeAbandonedCheckout } from './shopify-abandoned-checkout.js';
 
 function getStripe() {
   const key = process.env.STRIPE_SECRET_KEY;
@@ -37,6 +38,8 @@ export async function completeOrderFromStripeSession(sessionId) {
       shopify_order_name: order.name || '',
     },
   });
+
+  await closeAbandonedCheckout(session.metadata?.shopify_checkout_token);
 
   return {
     orderId: order.id,
