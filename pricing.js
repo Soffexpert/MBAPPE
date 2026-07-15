@@ -53,11 +53,13 @@ export function buildStripeShippingOptions(postalCode, market) {
     if (cph) {
       return [
         shippingOption('Hjemlevering (København)', 1600, 'dkk', false),
+        shippingOption('Hjemlevering + indbæring (København)', 1600 + 650, 'dkk', true),
       ];
     }
 
     return [
       shippingOption('Hjemlevering', 2000, 'dkk', false),
+      shippingOption('Hjemlevering + indbæring', 2000 + 800, 'dkk', true),
     ];
   }
 
