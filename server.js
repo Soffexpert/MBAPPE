@@ -6,7 +6,7 @@ import {
 } from './stripe-checkout.js';
 import { createShopifyOrderFromSession } from './shopify-order.js';
 import { completeOrderFromStripeSession } from './order-complete.js';
-import { handleSellSofa } from './sell-sofa.js';
+import { handleSellSofa, getSellSofaMailStatus } from './sell-sofa.js';
 
 const PORT = process.env.PORT || 3000;
 
@@ -43,11 +43,10 @@ function mapCartItems(body) {
 async function handleCreateSession(req, res) {
   try {
     const body = await readJson(req);
-    const promotionCode = body.promotion_code || body.promotionCode || '';
     const session = await createEmbeddedCheckoutSession({
       cartItems: mapCartItems(body),
       returnUrl: body.return_url || body.returnUrl,
-      promotionCode: promotionCode || undefined,
+      market: body.market || body.locale || 'sv',
     });
 
     sendJson(res, 200, {
@@ -76,6 +75,7 @@ async function handleCalculateShipping(req, res) {
     const result = await updateCheckoutShipping({
       checkoutSessionId: sessionId,
       shippingDetails,
+      market: body.market || body.locale || 'sv',
     });
 
     sendJson(res, 200, result);
@@ -223,7 +223,10 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (req.method === 'GET' && path === '/health') {
-    sendJson(res, 200, { ok: true });
+    sendJson(res, 200, {
+      ok: true,
+      sellSofaMail: getSellSofaMailStatus(),
+    });
     return;
   }
 
