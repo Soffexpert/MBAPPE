@@ -52,14 +52,12 @@ export function buildStripeShippingOptions(postalCode, market) {
 
     if (cph) {
       return [
-        shippingOption('Hjemlevering (EXPRESS)', 0, 'dkk', false),
-        shippingOption('Hjemlevering + indbæring (EXPRESS)', convertSekToDkk(349), 'dkk', true),
+        shippingOption('Hjemlevering (København)', 1600, 'dkk', false),
       ];
     }
 
     return [
-      shippingOption('Hjemlevering til kantsten [DHL]', convertSekToDkk(899), 'dkk', false),
-      shippingOption('Hjemlevering + indbæring [DHL]', convertSekToDkk(1798), 'dkk', true),
+      shippingOption('Hjemlevering', 2000, 'dkk', false),
     ];
   }
 
