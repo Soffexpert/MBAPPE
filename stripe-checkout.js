@@ -1,5 +1,9 @@
 import Stripe from 'stripe';
 import { buildStripeShippingOptions } from './pricing.js';
+import {
+  createAbandonedCheckoutFromCart,
+  syncAbandonedCheckoutFromStripeSession,
+} from './shopify-abandoned-checkout.js';
 
 const SEK_TO_DKK = Number(process.env.SEK_TO_DKK_RATE || 0.63);
 
@@ -106,11 +110,23 @@ function resolveReturnUrl(requestReturnUrl) {
   return THANK_YOU_RETURN_URL;
 }
 
-export async function createEmbeddedCheckoutSession({ cartItems, returnUrl, market }) {
+export async function createEmbeddedCheckoutSession({ cartItems, returnUrl, market, cartToken }) {
   const stripe = getStripe();
   const cfg = getMarketConfig(market);
   const lineItems = buildProductLineItems(cartItems, market);
   const resolvedReturnUrl = resolveReturnUrl(returnUrl);
+
+  let shopifyCheckoutToken = '';
+  try {
+    const abandoned = await createAbandonedCheckoutFromCart({
+      cartItems,
+      cartToken,
+      market,
+    });
+    shopifyCheckoutToken = abandoned?.token || '';
+  } catch (error) {
+    console.error('createAbandonedCheckoutFromCart:', error.message);
+  }
 
   const session = await stripe.checkout.sessions.create({
     ui_mode: 'embedded',
@@ -147,6 +163,8 @@ export async function createEmbeddedCheckoutSession({ cartItems, returnUrl, mark
     metadata: {
       source: 'soffexpert_embedded',
       market: market || 'sv',
+      cart_token: cartToken || '',
+      shopify_checkout_token: shopifyCheckoutToken,
       variant_ids: cartItems.map((item) => item.variant_id).join(','),
     },
   });
@@ -173,6 +191,13 @@ export async function updateCheckoutShipping({ checkoutSessionId, shippingDetail
     },
     shipping_options: shippingOptions,
   });
+
+  try {
+    const session = await stripe.checkout.sessions.retrieve(checkoutSessionId);
+    await syncAbandonedCheckoutFromStripeSession(session, shippingDetails);
+  } catch (error) {
+    console.error('syncAbandonedCheckoutFromStripeSession:', error.message);
+  }
 
   return { type: 'object', value: { succeeded: true } };
 }
