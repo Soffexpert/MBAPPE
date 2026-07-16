@@ -20,7 +20,10 @@ function isCopenhagenArea(zipCode) {
 }
 
 function shippingOption(displayName, amount, currency, carry) {
-  const amountMinor = Math.round(amount * 100);
+  const isDkk = currency === 'dkk';
+  const amountMinor = isDkk
+    ? Math.round(amount * 100)
+    : Math.round(amount * 100);
 
   return {
     shipping_rate_data: {
@@ -52,14 +55,14 @@ export function buildStripeShippingOptions(postalCode, market) {
 
     if (cph) {
       return [
-        shippingOption('Hjemlevering', 1600, 'dkk', false),
-        shippingOption('Hjemlevering + indbæring', 1600 + 650, 'dkk', true),
+        shippingOption('(DHL Express) Hjemlevering', 1200, 'dkk', false),
+        shippingOption('(DHL Express) Hjemlevering + indbæring', 1700, 'dkk', true),
       ];
     }
 
     return [
-      shippingOption('Hjemlevering', 2000, 'dkk', false),
-      shippingOption('Hjemlevering + indbæring', 2000 + 800, 'dkk', true),
+      shippingOption('(DHL Express) Hjemlevering', 1500, 'dkk', false),
+      shippingOption('(DHL Express) Hjemlevering + indbæring', 2000, 'dkk', true),
     ];
   }
 
