@@ -33,6 +33,14 @@ function getAddress(session) {
 
 function getShippingLabel(session) {
   const shippingCost = (session.total_details?.amount_shipping || 0) / 100;
+  const market = session.metadata?.market || 'sv';
+
+  if (market === 'da') {
+    if (shippingCost >= 1700) return '(DHL Express) Hjemlevering + indbæring';
+    if (shippingCost >= 1200) return '(DHL Express) Hjemlevering';
+    return 'Fragt';
+  }
+
   if (shippingCost === 0) return 'Hemleverans (EXPRESS)';
   if (shippingCost >= 1500) return 'Hemleverans till tomtgräns (+inbärning) [DHL]';
   if (shippingCost >= 800) return 'Hemleverans till tomtgräns [DHL]';
@@ -153,6 +161,7 @@ export async function createShopifyOrderFromSession(stripe, session) {
   const shippingAddress = getAddress(session);
   const orderNote = getOrderNote(session);
   const shippingTotal = (session.total_details?.amount_shipping || 0) / 100;
+  const discountTotal = (session.total_details?.amount_discount || 0) / 100;
   const shippingLabel = getShippingLabel(session);
   const customerEmail = session.customer_details?.email;
 
@@ -166,6 +175,7 @@ export async function createShopifyOrderFromSession(stripe, session) {
       note: [
         'Betald via Stripe Embedded Checkout (Klarna/kort).',
         orderNote ? `Kundanteckning: ${orderNote}` : '',
+        discountTotal > 0 ? `Rabattkod tillämpad: -${formatMoney(discountTotal)} SEK` : '',
         `Vald frakt: ${shippingLabel}`,
         `Stripe session: ${session.id}`,
       ]
