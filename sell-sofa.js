@@ -1,8 +1,10 @@
 import Busboy from 'busboy';
 import nodemailer from 'nodemailer';
+import { Resend } from 'resend';
 
 const MAX_FILES = 8;
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
+const SMTP_TIMEOUT_MS = 15000;
 const ALLOWED_MIMES = new Set([
   'image/jpeg',
   'image/png',
@@ -11,6 +13,36 @@ const ALLOWED_MIMES = new Set([
   'image/heif',
 ]);
 const ALLOWED_EXT = /\.(jpe?g|png|webp|heic|heif)$/i;
+
+export function getSellSofaMailStatus() {
+  if (process.env.RESEND_API_KEY) {
+    return {
+      configured: true,
+      provider: 'resend',
+      to: process.env.SELL_SOFA_EMAIL_TO || 'support@soffexpert.se',
+    };
+  }
+
+  const host = process.env.SMTP_HOST;
+  const user = process.env.SMTP_USER;
+  const pass = process.env.SMTP_PASS;
+
+  if (host && user && pass) {
+    return {
+      configured: true,
+      provider: 'smtp',
+      to: process.env.SELL_SOFA_EMAIL_TO || 'support@soffexpert.se',
+      warning:
+        'SMTP fungerar inte på Render Free (port 465/587 blockeras). Använd RESEND_API_KEY eller uppgradera Render.',
+    };
+  }
+
+  return {
+    configured: false,
+    provider: null,
+    to: process.env.SELL_SOFA_EMAIL_TO || 'support@soffexpert.se',
+  };
+}
 
 function parseMultipart(req) {
   return new Promise((resolve, reject) => {
@@ -155,51 +187,36 @@ function buildEmailText(data) {
   return lines.join('\n');
 }
 
-async function sendViaResend({ to, from, subject, text, attachments }) {
-  const response = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      from,
-      to: [to],
-      subject,
-      text,
-      attachments: attachments.map((file) => ({
-        filename: file.filename,
-        content: file.buffer.toString('base64'),
-      })),
-    }),
-  });
+function wrapSmtpError(error) {
+  const message = error?.message || String(error);
+  const code = error?.code || '';
 
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`Resend-fel: ${body || response.statusText}`);
+  if (
+    message.includes('timeout') ||
+    message.includes('ETIMEDOUT') ||
+    message.includes('ECONNREFUSED') ||
+    code === 'ETIMEDOUT' ||
+    code === 'ESOCKET'
+  ) {
+    throw new Error(
+      'SMTP blockeras på Render Free. Lägg till RESEND_API_KEY i Render Environment (rekommenderat), eller uppgradera till betald Render-plan.'
+    );
   }
+
+  throw error;
 }
 
-async function sendViaSmtp({ to, from, subject, text, attachments }) {
-  const host = process.env.SMTP_HOST;
-  const port = Number(process.env.SMTP_PORT || 587);
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
-
-  if (!host || !user || !pass) {
-    throw new Error('E-post är inte konfigurerad (SMTP eller Resend).');
+async function sendViaResend({ to, from, replyTo, subject, text, attachments }) {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) {
+    throw new Error('RESEND_API_KEY saknas.');
   }
 
-  const transporter = nodemailer.createTransport({
-    host,
-    port,
-    secure: port === 465,
-    auth: { user, pass },
-  });
-
-  await transporter.sendMail({
+  const resend = new Resend(apiKey);
+  const { data, error } = await resend.emails.send({
     from,
     to,
+    replyTo,
     subject,
     text,
     attachments: attachments.map((file) => ({
@@ -208,23 +225,88 @@ async function sendViaSmtp({ to, from, subject, text, attachments }) {
       contentType: file.mimeType,
     })),
   });
+
+  if (error) {
+    const message = error.message || JSON.stringify(error);
+    if (message.includes('domain is not verified')) {
+      throw new Error(
+        'Avsändardomänen är inte verifierad i Resend. Verifiera soffexpert.se på resend.com/domains, eller sätt tillfälligt RESEND_FROM=onboarding@resend.dev på Render.'
+      );
+    }
+    throw new Error(`Resend-fel: ${message}`);
+  }
+
+  return data;
+}
+
+async function sendViaSmtp({ to, from, replyTo, subject, text, attachments }) {
+  const host = process.env.SMTP_HOST;
+  const port = Number(process.env.SMTP_PORT || 587);
+  const user = process.env.SMTP_USER;
+  const pass = process.env.SMTP_PASS;
+
+  if (!host || !user || !pass) {
+    throw new Error(
+      'E-post är inte konfigurerad. Lägg till RESEND_API_KEY (rekommenderat) eller SMTP-uppgifter i Render.'
+    );
+  }
+
+  const transporter = nodemailer.createTransport({
+    host,
+    port,
+    secure: port === 465,
+    auth: { user, pass },
+    connectionTimeout: SMTP_TIMEOUT_MS,
+    greetingTimeout: SMTP_TIMEOUT_MS,
+    socketTimeout: SMTP_TIMEOUT_MS,
+  });
+
+  try {
+    await transporter.sendMail({
+      from,
+      to,
+      replyTo,
+      subject,
+      text,
+      attachments: attachments.map((file) => ({
+        filename: file.filename,
+        content: file.buffer,
+        contentType: file.mimeType,
+      })),
+    });
+  } catch (error) {
+    wrapSmtpError(error);
+  }
 }
 
 async function sendSellSofaEmail(data) {
+  const mailStatus = getSellSofaMailStatus();
+  if (!mailStatus.configured) {
+    throw new Error(
+      'E-post är inte konfigurerad. Lägg till RESEND_API_KEY i Render Environment.'
+    );
+  }
+
   const to = process.env.SELL_SOFA_EMAIL_TO || 'support@soffexpert.se';
   const from =
-    process.env.SMTP_FROM ||
     process.env.RESEND_FROM ||
-    'Soffexpert <noreply@soffexpert.se>';
+    process.env.SMTP_FROM ||
+    (process.env.SMTP_USER
+      ? `Soffexpert <${process.env.SMTP_USER}>`
+      : 'Soffexpert <webmaster@soffexpert.se>');
   const subject = `Sälj soffa: ${data.soffa.slice(0, 50)} (${data.plats})`;
   const text = buildEmailText(data);
+  const replyTo = data.email;
+  const payload = { to, from, replyTo, subject, text, attachments: data.files };
 
   if (process.env.RESEND_API_KEY) {
-    await sendViaResend({ to, from, subject, text, attachments: data.files });
+    await sendViaResend(payload);
+    console.log('sell-sofa email sent via Resend to', to);
     return;
   }
 
-  await sendViaSmtp({ to, from, subject, text, attachments: data.files });
+  await sendViaSmtp(payload);
+  console.log('sell-sofa email sent via SMTP to', to);
 }
 
 export async function handleSellSofa(req) {
