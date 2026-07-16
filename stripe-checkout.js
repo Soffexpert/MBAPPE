@@ -116,18 +116,7 @@ export async function createEmbeddedCheckoutSession({ cartItems, returnUrl, mark
   const lineItems = buildProductLineItems(cartItems, market);
   const resolvedReturnUrl = resolveReturnUrl(returnUrl);
 
-  let shopifyCheckoutToken = '';
-  try {
-    const abandoned = await createAbandonedCheckoutFromCart({
-      cartItems,
-      cartToken,
-      market,
-    });
-    shopifyCheckoutToken = abandoned?.token || '';
-  } catch (error) {
-    console.error('createAbandonedCheckoutFromCart:', error.message);
-  }
-
+  // Create Stripe session first — do NOT wait for Shopify abandoned checkout
   const session = await stripe.checkout.sessions.create({
     ui_mode: 'embedded',
     mode: 'payment',
@@ -164,10 +153,30 @@ export async function createEmbeddedCheckoutSession({ cartItems, returnUrl, mark
       source: 'soffexpert_embedded',
       market: market || 'sv',
       cart_token: cartToken || '',
-      shopify_checkout_token: shopifyCheckoutToken,
+      shopify_checkout_token: '',
       variant_ids: cartItems.map((item) => item.variant_id).join(','),
     },
   });
+
+  createAbandonedCheckoutFromCart({
+    cartItems,
+    cartToken,
+    market,
+    stripeSessionId: session.id,
+  })
+    .then(async (abandoned) => {
+      const token = abandoned?.token || '';
+      if (!token) return;
+      await stripe.checkout.sessions.update(session.id, {
+        metadata: {
+          ...session.metadata,
+          shopify_checkout_token: token,
+        },
+      });
+    })
+    .catch((error) => {
+      console.error('createAbandonedCheckoutFromCart:', error.message);
+    });
 
   return session;
 }
