@@ -120,7 +120,7 @@ export async function createEmbeddedCheckoutSession({ cartItems, returnUrl, mark
   const session = await stripe.checkout.sessions.create({
     ui_mode: 'embedded',
     mode: 'payment',
-    payment_method_types: ['card', 'klarna'],
+    payment_method_types: ['card', 'klarna', 'mobilepay'],
     allow_promotion_codes: true,
     line_items: lineItems,
     locale: cfg.locale,
