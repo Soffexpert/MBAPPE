@@ -116,12 +116,11 @@ export async function createEmbeddedCheckoutSession({ cartItems, returnUrl, mark
   const lineItems = buildProductLineItems(cartItems, market);
   const resolvedReturnUrl = resolveReturnUrl(returnUrl);
 
-  // Create Stripe session first — do NOT wait for Shopify abandoned checkout
-  // (Admin API can add several seconds and blank the checkout UX).
   // MobilePay only appears for shoppers Stripe sees as DK/FI (IP/location).
   const paymentMethodTypes =
     market === 'da' ? ['card', 'klarna', 'mobilepay'] : ['card', 'klarna'];
 
+  // Create Stripe session first — do NOT wait for Shopify abandoned checkout
   const session = await stripe.checkout.sessions.create({
     ui_mode: 'embedded',
     mode: 'payment',
@@ -163,7 +162,6 @@ export async function createEmbeddedCheckoutSession({ cartItems, returnUrl, mark
     },
   });
 
-  // Attach abandoned-checkout token in the background
   createAbandonedCheckoutFromCart({
     cartItems,
     cartToken,
@@ -213,7 +211,7 @@ export async function updateCheckoutShipping({ checkoutSessionId, shippingDetail
 
   try {
     const session = await stripe.checkout.sessions.retrieve(checkoutSessionId);
-    await syncAbandonedCheckoutFromStripeSession(session, shippingDetails);
+    await syncAbandonedCheckoutFromStripeSession(session, shippingDetails, stripe);
   } catch (error) {
     console.error('syncAbandonedCheckoutFromStripeSession:', error.message);
   }
