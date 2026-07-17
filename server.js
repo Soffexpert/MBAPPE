@@ -57,6 +57,7 @@ async function handleCreateSession(req, res) {
     sendJson(res, 200, {
       clientSecret: session.client_secret,
       sessionId: session.id,
+      paymentMethodTypes: session.payment_method_types || [],
     });
   } catch (error) {
     console.error('create-checkout-session:', error);
@@ -179,10 +180,11 @@ async function handleSyncAbandonedCheckout(req, res) {
 
     const stripe = new Stripe(stripeKey);
     const session = await stripe.checkout.sessions.retrieve(sessionId);
-    const checkout = await syncAbandonedCheckoutFromStripeSession(session);
+    const checkout = await syncAbandonedCheckoutFromStripeSession(session, null, stripe);
 
     sendJson(res, 200, {
       synced: Boolean(checkout),
+      draftId: checkout?.id || session.metadata?.shopify_checkout_token || null,
       email: session.customer_details?.email || null,
     });
   } catch (error) {
