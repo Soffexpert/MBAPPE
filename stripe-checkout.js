@@ -99,6 +99,43 @@ export function buildProductLineItems(cartItems, market) {
 const THANK_YOU_RETURN_URL =
   'https://www.soffexpert.se/pages/tack-for-din-bestallning?session_id={CHECKOUT_SESSION_ID}';
 
+const WALLET_DOMAINS = [
+  'soffexpert.se',
+  'www.soffexpert.se',
+  'soffexpert.dk',
+  'www.soffexpert.dk',
+];
+
+let walletDomainsReady = null;
+
+/** Apple Pay / Google Pay need domains registered on the Stripe account. */
+async function ensureWalletDomains(stripe) {
+  if (walletDomainsReady) return walletDomainsReady;
+
+  walletDomainsReady = (async () => {
+    const results = [];
+    for (const domain_name of WALLET_DOMAINS) {
+      try {
+        const domain = await stripe.paymentMethodDomains.create({ domain_name });
+        results.push({ domain_name, id: domain.id, applePay: domain.apple_pay?.status });
+        console.log('payment method domain registered', domain_name, domain.apple_pay?.status);
+      } catch (error) {
+        // Already registered is fine
+        const msg = error?.message || String(error);
+        if (/already|exists|duplicate/i.test(msg)) {
+          results.push({ domain_name, status: 'exists' });
+        } else {
+          console.warn('paymentMethodDomains.create failed', domain_name, msg);
+          results.push({ domain_name, error: msg });
+        }
+      }
+    }
+    return results;
+  })();
+
+  return walletDomainsReady;
+}
+
 function resolveReturnUrl(requestReturnUrl) {
   if (requestReturnUrl) return requestReturnUrl;
 
@@ -116,6 +153,10 @@ export async function createEmbeddedCheckoutSession({ cartItems, returnUrl, mark
   const lineItems = buildProductLineItems(cartItems, market);
   const resolvedReturnUrl = resolveReturnUrl(returnUrl);
 
+  // Register domains so Apple Pay / Google Pay can show (card enables wallets).
+  await ensureWalletDomains(stripe);
+
+  // card ⇒ Apple Pay + Google Pay when domain/browser/wallet allow it.
   // MobilePay only appears for shoppers Stripe sees as DK/FI (IP/location).
   const paymentMethodTypes =
     market === 'da' ? ['card', 'klarna', 'mobilepay'] : ['card', 'klarna'];
@@ -125,6 +166,12 @@ export async function createEmbeddedCheckoutSession({ cartItems, returnUrl, mark
     ui_mode: 'embedded',
     mode: 'payment',
     payment_method_types: paymentMethodTypes,
+    // Keep wallet buttons available alongside card
+    payment_method_options: {
+      card: {
+        request_three_d_secure: 'automatic',
+      },
+    },
     allow_promotion_codes: true,
     line_items: lineItems,
     locale: cfg.locale,
