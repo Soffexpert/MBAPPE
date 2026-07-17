@@ -1,4 +1,4 @@
-const SEK_TO_DKK = Number(process.env.SEK_TO_DKK_RATE || 0.63);
+const SEK_TO_DKK = Number(process.env.SEK_TO_DKK_RATE || 0.68);
 
 export function parseZipCode(zipCode) {
   const digits = String(zipCode || '').replace(/\D/g, '');
