@@ -5,7 +5,7 @@ import {
   syncAbandonedCheckoutFromStripeSession,
 } from './shopify-abandoned-checkout.js';
 
-const SEK_TO_DKK = Number(process.env.SEK_TO_DKK_RATE || 0.68);
+const SEK_TO_DKK = Number(process.env.SEK_TO_DKK_RATE || 0.63);
 
 function getStripe() {
   const key = process.env.STRIPE_SECRET_KEY;
@@ -117,10 +117,15 @@ export async function createEmbeddedCheckoutSession({ cartItems, returnUrl, mark
   const resolvedReturnUrl = resolveReturnUrl(returnUrl);
 
   // Create Stripe session first — do NOT wait for Shopify abandoned checkout
+  // (Admin API can add several seconds and blank the checkout UX).
+  // MobilePay only appears for shoppers Stripe sees as DK/FI (IP/location).
+  const paymentMethodTypes =
+    market === 'da' ? ['card', 'klarna', 'mobilepay'] : ['card', 'klarna'];
+
   const session = await stripe.checkout.sessions.create({
     ui_mode: 'embedded',
     mode: 'payment',
-    payment_method_types: ['card', 'klarna', 'mobilepay'],
+    payment_method_types: paymentMethodTypes,
     allow_promotion_codes: true,
     line_items: lineItems,
     locale: cfg.locale,
@@ -158,6 +163,7 @@ export async function createEmbeddedCheckoutSession({ cartItems, returnUrl, mark
     },
   });
 
+  // Attach abandoned-checkout token in the background
   createAbandonedCheckoutFromCart({
     cartItems,
     cartToken,
@@ -166,7 +172,11 @@ export async function createEmbeddedCheckoutSession({ cartItems, returnUrl, mark
   })
     .then(async (abandoned) => {
       const token = abandoned?.token || '';
-      if (!token) return;
+      if (!token) {
+        console.error('createAbandonedCheckoutFromCart: no draft token returned');
+        return;
+      }
+      console.log('abandoned draft created', token);
       await stripe.checkout.sessions.update(session.id, {
         metadata: {
           ...session.metadata,
