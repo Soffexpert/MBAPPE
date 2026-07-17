@@ -26,6 +26,13 @@ export async function completeOrderFromStripeSession(sessionId) {
       orderName: session.metadata.shopify_order_name || '',
       email: session.customer_details?.email || '',
       alreadyExisted: true,
+      value:
+        typeof session.amount_total === 'number' ? session.amount_total / 100 : null,
+      currency: String(session.currency || '').toUpperCase() || null,
+      contentIds: String(session.metadata?.variant_ids || '')
+        .split(',')
+        .map((id) => id.trim())
+        .filter(Boolean),
     };
   }
 
@@ -41,10 +48,20 @@ export async function completeOrderFromStripeSession(sessionId) {
 
   await closeAbandonedCheckout(session.metadata?.shopify_checkout_token);
 
+  const value =
+    typeof session.amount_total === 'number' ? session.amount_total / 100 : null;
+  const currency = String(session.currency || '').toUpperCase() || null;
+
   return {
     orderId: order.id,
     orderName: order.name || '',
     email: session.customer_details?.email || order.email || '',
     alreadyExisted: false,
+    value,
+    currency,
+    contentIds: String(session.metadata?.variant_ids || '')
+      .split(',')
+      .map((id) => id.trim())
+      .filter(Boolean),
   };
 }
