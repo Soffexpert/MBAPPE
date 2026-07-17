@@ -5,7 +5,7 @@ import {
   syncAbandonedCheckoutFromStripeSession,
 } from './shopify-abandoned-checkout.js';
 
-const SEK_TO_DKK = Number(process.env.SEK_TO_DKK_RATE || 0.63);
+const SEK_TO_DKK = Number(process.env.SEK_TO_DKK_RATE || 0.68);
 
 function getStripe() {
   const key = process.env.STRIPE_SECRET_KEY;
