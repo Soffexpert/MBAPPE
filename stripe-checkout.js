@@ -162,18 +162,21 @@ export async function createEmbeddedCheckoutSession({ cartItems, returnUrl, mark
     },
   });
 
-  createAbandonedCheckoutFromCart({
-    cartItems,
-    cartToken,
-    market,
-    stripeSessionId: session.id,
-  })
-    .then(async (abandoned) => {
-      const token = abandoned?.token || '';
-      if (!token) {
-        console.error('createAbandonedCheckoutFromCart: no draft token returned');
-        return;
-      }
+  let abandonedDraftId = null;
+  let abandonedError = null;
+  try {
+    const abandoned = await createAbandonedCheckoutFromCart({
+      cartItems,
+      cartToken,
+      market,
+      stripeSessionId: session.id,
+    });
+    const token = abandoned?.token || '';
+    if (!token) {
+      abandonedError = 'no draft token returned';
+      console.error('createAbandonedCheckoutFromCart:', abandonedError);
+    } else {
+      abandonedDraftId = token;
       console.log('abandoned draft created', token);
       await stripe.checkout.sessions.update(session.id, {
         metadata: {
@@ -181,11 +184,18 @@ export async function createEmbeddedCheckoutSession({ cartItems, returnUrl, mark
           shopify_checkout_token: token,
         },
       });
-    })
-    .catch((error) => {
-      console.error('createAbandonedCheckoutFromCart:', error.message);
-    });
+      session.metadata = {
+        ...(session.metadata || {}),
+        shopify_checkout_token: token,
+      };
+    }
+  } catch (error) {
+    abandonedError = error.message || String(error);
+    console.error('createAbandonedCheckoutFromCart:', abandonedError);
+  }
 
+  session._abandonedDraftId = abandonedDraftId;
+  session._abandonedError = abandonedError;
   return session;
 }
 
