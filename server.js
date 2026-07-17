@@ -10,7 +10,10 @@ import { handleSellSofa, getSellSofaMailStatus } from './sell-sofa.js';
 import {
   syncAbandonedCheckoutFromStripeSession,
   closeAbandonedCheckout,
+  createAbandonedCheckoutFromCart,
 } from './shopify-abandoned-checkout.js';
+import { getShopifyAccessToken } from './shopify-auth.js';
+import { getAdminStoreHost } from './shopify-store.js';
 
 const PORT = process.env.PORT || 3000;
 
@@ -58,6 +61,8 @@ async function handleCreateSession(req, res) {
       clientSecret: session.client_secret,
       sessionId: session.id,
       paymentMethodTypes: session.payment_method_types || [],
+      abandonedDraftId: session._abandonedDraftId || null,
+      abandonedError: session._abandonedError || null,
     });
   } catch (error) {
     console.error('create-checkout-session:', error);
@@ -193,6 +198,53 @@ async function handleSyncAbandonedCheckout(req, res) {
   }
 }
 
+async function handleDebugDraftOrder(req, res) {
+  try {
+    const { store, token } = await getShopifyAccessToken();
+    const adminStore = getAdminStoreHost(store);
+    const scopesRes = await fetch(
+      `https://${adminStore}/admin/oauth/access_scopes.json`,
+      { headers: { 'X-Shopify-Access-Token': token } }
+    );
+    const scopesData = await scopesRes.json().catch(() => ({}));
+
+    const body = await readJson(req).catch(() => ({}));
+    const variantId = Number(body.variant_id || 0);
+
+    let createResult = null;
+    let createError = null;
+    if (variantId) {
+      try {
+        createResult = await createAbandonedCheckoutFromCart({
+          cartItems: [{ variant_id: variantId, quantity: 1 }],
+          cartToken: 'debug',
+          market: body.market || 'sv',
+          stripeSessionId: 'debug_' + Date.now(),
+          email: body.email || undefined,
+        });
+      } catch (error) {
+        createError = error.message || String(error);
+      }
+    }
+
+    sendJson(res, 200, {
+      store: adminStore,
+      scopes: scopesData,
+      hasWriteDraftOrders: JSON.stringify(scopesData).includes('write_draft_orders'),
+      createResult: createResult
+        ? { id: createResult.id, token: createResult.token }
+        : null,
+      createError,
+      hint: variantId
+        ? null
+        : 'POST {"variant_id":123456789} to also test draft create',
+    });
+  } catch (error) {
+    console.error('debug-draft-order:', error);
+    sendJson(res, 500, { error: error.message || 'Debug failed.' });
+  }
+}
+
 async function handleSellSofaRequest(req, res) {
   try {
     const result = await handleSellSofa(req);
@@ -278,6 +330,14 @@ const server = http.createServer(async (req, res) => {
       ok: true,
       sellSofaMail: getSellSofaMailStatus(),
     });
+    return;
+  }
+
+  if (
+    (req.method === 'GET' || req.method === 'POST') &&
+    path === '/debug-draft-order'
+  ) {
+    await handleDebugDraftOrder(req, res);
     return;
   }
 
