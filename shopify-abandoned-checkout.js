@@ -37,7 +37,10 @@ function buildLineItems(cartItems) {
 }
 
 function splitName(name) {
-  const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+  const parts = String(name || '')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
   return {
     first_name: parts[0] || '',
     last_name: parts.slice(1).join(' ') || '',
@@ -62,69 +65,109 @@ function shippingFromStripe(session, shippingDetails) {
     city: address.city || '',
     zip: address.postal_code || '',
     country_code: address.country || getCountryCode(session.metadata?.market),
-    phone: session.customer_details?.phone || '',
+    phone: session.customer_details?.phone || shipping?.phone || '',
   };
 }
 
-export async function createAbandonedCheckoutFromCart({ cartItems, cartToken, market, stripeSessionId }) {
+/**
+ * Shopify Checkout Admin API was shut down Apr 2025, so we create Draft Orders
+ * tagged as abandoned Stripe checkouts. They show under Orders → Drafts.
+ * Metadata key remains shopify_checkout_token (= draft order id) for compatibility.
+ */
+export async function createAbandonedCheckoutFromCart({
+  cartItems,
+  cartToken,
+  market,
+  stripeSessionId,
+}) {
   const line_items = buildLineItems(cartItems);
-  if (!line_items.length) return null;
+  if (!line_items.length) {
+    console.warn('abandoned draft: no valid line_items');
+    return null;
+  }
 
-  const checkout = {
+  const draft_order = {
     line_items,
     note: [
-      'Stripe embedded checkout',
+      'Övergiven Stripe-kassa (ej Shopify Checkout)',
       stripeSessionId ? `Stripe session: ${stripeSessionId}` : '',
       cartToken ? `Cart token: ${cartToken}` : '',
+      `Market: ${market || 'sv'}`,
     ]
       .filter(Boolean)
       .join('\n'),
+    tags: 'stripe-abandoned,soffexpert',
     shipping_address: {
       country_code: getCountryCode(market),
     },
   };
 
-  const result = await adminFetch('/checkouts.json', {
+  const result = await adminFetch('/draft_orders.json', {
     method: 'POST',
-    body: { checkout },
+    body: { draft_order },
   });
 
-  return result.checkout || null;
+  const draft = result.draft_order || null;
+  if (!draft?.id) {
+    console.error('abandoned draft: create returned no id', result);
+    return null;
+  }
+
+  return {
+    ...draft,
+    token: String(draft.id),
+    id: draft.id,
+  };
 }
 
 export async function syncAbandonedCheckoutFromStripeSession(session, shippingDetails) {
-  const checkoutToken = session.metadata?.shopify_checkout_token;
-  if (!checkoutToken) return null;
+  const draftId = session.metadata?.shopify_checkout_token;
+  if (!draftId) {
+    console.warn('abandoned draft sync: missing shopify_checkout_token on session', session.id);
+    return null;
+  }
 
   const email = session.customer_details?.email;
   const shippingAddress = shippingFromStripe(session, shippingDetails);
-  const shippingTotal = (session.total_details?.amount_shipping || 0) / 100;
 
-  const checkout = {};
-  if (email) checkout.email = email;
-  if (shippingAddress) checkout.shipping_address = shippingAddress;
-  if (shippingTotal > 0) {
-    checkout.shipping_line = {
-      title: 'Frakt (Stripe)',
-      price: shippingTotal.toFixed(2),
-    };
+  const draft_order = {};
+  if (email) draft_order.email = email;
+  if (shippingAddress) {
+    draft_order.shipping_address = shippingAddress;
+    draft_order.billing_address = shippingAddress;
   }
 
-  if (!Object.keys(checkout).length) return null;
+  const noteExtra = [
+    session.id ? `Stripe session: ${session.id}` : '',
+    email ? `Email: ${email}` : '',
+    session.status ? `Stripe status: ${session.status}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
 
-  const result = await adminFetch(`/checkouts/${checkoutToken}.json`, {
+  if (noteExtra) {
+    draft_order.note = [
+      'Övergiven Stripe-kassa (ej Shopify Checkout)',
+      noteExtra,
+      `Market: ${session.metadata?.market || 'sv'}`,
+    ].join('\n');
+  }
+
+  if (!Object.keys(draft_order).length) return null;
+
+  const result = await adminFetch(`/draft_orders/${draftId}.json`, {
     method: 'PUT',
-    body: { checkout },
+    body: { draft_order },
   });
 
-  return result.checkout || null;
+  return result.draft_order || null;
 }
 
 export async function closeAbandonedCheckout(checkoutToken) {
   if (!checkoutToken) return;
   try {
-    await adminFetch(`/checkouts/${checkoutToken}.json`, { method: 'DELETE' });
+    await adminFetch(`/draft_orders/${checkoutToken}.json`, { method: 'DELETE' });
   } catch (error) {
-    console.error('Could not close abandoned checkout:', error.message);
+    console.error('Could not close abandoned draft order:', error.message);
   }
 }
