@@ -18,8 +18,15 @@ async function adminFetch(path, { method = 'GET', body } = {}) {
 
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const message = data.errors ? JSON.stringify(data.errors) : response.statusText;
-    throw new Error(message || 'Shopify Admin API failed.');
+    const message = data.errors
+      ? JSON.stringify(data.errors)
+      : data.error || response.statusText;
+    const err = new Error(
+      `Shopify ${method} ${path} → ${response.status}: ${message || 'Admin API failed.'}`
+    );
+    err.status = response.status;
+    err.shopify = data;
+    throw err;
   }
   return data;
 }
@@ -137,13 +144,12 @@ export async function createAbandonedCheckoutFromCart({
   };
 
   if (email) draft_order.email = email;
-  if (shippingAddress) {
+
+  // Only attach address when we have a real street — country-only payloads
+  // are rejected by Shopify and silently kill abandoned draft creation.
+  if (shippingAddress?.address1) {
     draft_order.shipping_address = shippingAddress;
     draft_order.billing_address = shippingAddress;
-  } else {
-    draft_order.shipping_address = {
-      country_code: getCountryCode(market),
-    };
   }
 
   const result = await adminFetch('/draft_orders.json', {
@@ -224,7 +230,7 @@ export async function syncAbandonedCheckoutFromStripeSession(session, shippingDe
 
   const draft_order = {};
   if (email) draft_order.email = email;
-  if (shippingAddress) {
+  if (shippingAddress?.address1) {
     draft_order.shipping_address = shippingAddress;
     draft_order.billing_address = shippingAddress;
   }
