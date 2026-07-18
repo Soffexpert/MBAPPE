@@ -147,21 +147,48 @@ function resolveReturnUrl(requestReturnUrl) {
   return THANK_YOU_RETURN_URL;
 }
 
+async function attachAbandonedDraftInBackground(stripe, session, { cartItems, cartToken, market }) {
+  try {
+    const abandoned = await createAbandonedCheckoutFromCart({
+      cartItems,
+      cartToken,
+      market,
+      stripeSessionId: session.id,
+    });
+    const token = abandoned?.token || '';
+    if (!token) {
+      console.error('createAbandonedCheckoutFromCart: no draft token returned');
+      return;
+    }
+    console.log('abandoned draft created', token);
+    await stripe.checkout.sessions.update(session.id, {
+      metadata: {
+        ...(session.metadata || {}),
+        shopify_checkout_token: token,
+      },
+    });
+  } catch (error) {
+    console.error('createAbandonedCheckoutFromCart:', error.message || error);
+  }
+}
+
 export async function createEmbeddedCheckoutSession({ cartItems, returnUrl, market, cartToken }) {
   const stripe = getStripe();
   const cfg = getMarketConfig(market);
   const lineItems = buildProductLineItems(cartItems, market);
   const resolvedReturnUrl = resolveReturnUrl(returnUrl);
 
-  // Register domains so Apple Pay / Google Pay can show (card enables wallets).
-  await ensureWalletDomains(stripe);
+  // Non-blocking: Shopify app proxy times out ~10s; domain registration must not delay checkout.
+  ensureWalletDomains(stripe).catch(function (err) {
+    console.warn('ensureWalletDomains:', err?.message || err);
+  });
 
   // card ⇒ Apple Pay + Google Pay when domain/browser/wallet allow it.
   // MobilePay only appears for shoppers Stripe sees as DK/FI (IP/location).
   const paymentMethodTypes =
     market === 'da' ? ['card', 'klarna', 'mobilepay'] : ['card', 'klarna'];
 
-  // Create Stripe session first — do NOT wait for Shopify abandoned checkout
+  // Return as soon as Stripe session exists — abandoned draft runs in background.
   const session = await stripe.checkout.sessions.create({
     ui_mode: 'embedded',
     mode: 'payment',
@@ -209,40 +236,9 @@ export async function createEmbeddedCheckoutSession({ cartItems, returnUrl, mark
     },
   });
 
-  let abandonedDraftId = null;
-  let abandonedError = null;
-  try {
-    const abandoned = await createAbandonedCheckoutFromCart({
-      cartItems,
-      cartToken,
-      market,
-      stripeSessionId: session.id,
-    });
-    const token = abandoned?.token || '';
-    if (!token) {
-      abandonedError = 'no draft token returned';
-      console.error('createAbandonedCheckoutFromCart:', abandonedError);
-    } else {
-      abandonedDraftId = token;
-      console.log('abandoned draft created', token);
-      await stripe.checkout.sessions.update(session.id, {
-        metadata: {
-          ...session.metadata,
-          shopify_checkout_token: token,
-        },
-      });
-      session.metadata = {
-        ...(session.metadata || {}),
-        shopify_checkout_token: token,
-      };
-    }
-  } catch (error) {
-    abandonedError = error.message || String(error);
-    console.error('createAbandonedCheckoutFromCart:', abandonedError);
-  }
+  // Fire-and-forget so /apps/mbappe proxy does not return "Request timed out"
+  attachAbandonedDraftInBackground(stripe, session, { cartItems, cartToken, market });
 
-  session._abandonedDraftId = abandonedDraftId;
-  session._abandonedError = abandonedError;
   return session;
 }
 
