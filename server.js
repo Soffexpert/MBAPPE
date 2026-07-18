@@ -61,8 +61,6 @@ async function handleCreateSession(req, res) {
       clientSecret: session.client_secret,
       sessionId: session.id,
       paymentMethodTypes: session.payment_method_types || [],
-      abandonedDraftId: session._abandonedDraftId || null,
-      abandonedError: session._abandonedError || null,
     });
   } catch (error) {
     console.error('create-checkout-session:', error);
