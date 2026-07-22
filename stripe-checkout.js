@@ -232,7 +232,8 @@ export async function createEmbeddedCheckoutSession({ cartItems, returnUrl, mark
       market: market || 'sv',
       cart_token: cartToken || '',
       shopify_checkout_token: '',
-      variant_ids: cartItems.map((item) => item.variant_id).join(','),
+      variant_ids: cartItems.map((item) => item.variant_id).filter(Boolean).join(','),
+      product_ids: cartItems.map((item) => item.product_id).filter(Boolean).join(','),
     },
   });
 
