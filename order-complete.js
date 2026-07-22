@@ -8,60 +8,85 @@ function getStripe() {
   return new Stripe(key);
 }
 
-export async function completeOrderFromStripeSession(sessionId) {
+function buildResult(session, order, alreadyExisted) {
+  return {
+    orderId: order?.id || session.metadata?.shopify_order_id || null,
+    orderName: order?.name || session.metadata?.shopify_order_name || '',
+    email: session.customer_details?.email || order?.email || '',
+    alreadyExisted: Boolean(alreadyExisted),
+    paymentStatus: session.payment_status,
+    value:
+      typeof session.amount_total === 'number' ? session.amount_total / 100 : null,
+    currency: String(session.currency || '').toUpperCase() || null,
+    contentIds: String(session.metadata?.variant_ids || '')
+      .split(',')
+      .map((id) => id.trim())
+      .filter(Boolean),
+  };
+}
+
+/**
+ * Create Shopify order only when Stripe payment is actually paid.
+ * Safe to call from webhook (completed / async_payment_succeeded) and thank-you page.
+ */
+export async function fulfillPaidCheckoutSession(sessionId, { allowUnpaid = false } = {}) {
   if (!sessionId) {
     throw new Error('Saknar session_id.');
   }
 
   const stripe = getStripe();
-  const session = await stripe.checkout.sessions.retrieve(sessionId);
-
-  if (session.payment_status !== 'paid') {
-    throw new Error('Betalningen är inte slutförd ännu.');
-  }
+  const session = await stripe.checkout.sessions.retrieve(sessionId, {
+    expand: ['total_details', 'customer_details'],
+  });
 
   if (session.metadata?.shopify_order_id) {
-    return {
-      orderId: session.metadata.shopify_order_id,
-      orderName: session.metadata.shopify_order_name || '',
-      email: session.customer_details?.email || '',
-      alreadyExisted: true,
-      value:
-        typeof session.amount_total === 'number' ? session.amount_total / 100 : null,
-      currency: String(session.currency || '').toUpperCase() || null,
-      contentIds: String(session.metadata?.variant_ids || '')
-        .split(',')
-        .map((id) => id.trim())
-        .filter(Boolean),
-    };
+    return buildResult(session, null, true);
+  }
+
+  const paid =
+    session.payment_status === 'paid' ||
+    session.payment_status === 'no_payment_required';
+
+  if (!paid) {
+    if (allowUnpaid) {
+      return {
+        pending: true,
+        paymentStatus: session.payment_status,
+        orderId: null,
+        orderName: '',
+        email: session.customer_details?.email || '',
+        alreadyExisted: false,
+        value: null,
+        currency: null,
+        contentIds: [],
+      };
+    }
+    const err = new Error('Betalningen är inte slutförd ännu.');
+    err.code = 'PAYMENT_PENDING';
+    err.paymentStatus = session.payment_status;
+    throw err;
   }
 
   const order = await createShopifyOrderFromSession(stripe, session);
 
   await stripe.checkout.sessions.update(sessionId, {
     metadata: {
-      ...session.metadata,
+      ...(session.metadata || {}),
       shopify_order_id: String(order.id),
       shopify_order_name: order.name || '',
     },
   });
 
-  await closeAbandonedCheckout(session.metadata?.shopify_checkout_token);
+  try {
+    await closeAbandonedCheckout(session.metadata?.shopify_checkout_token);
+  } catch (error) {
+    console.error('closeAbandonedCheckout:', error.message || error);
+  }
 
-  const value =
-    typeof session.amount_total === 'number' ? session.amount_total / 100 : null;
-  const currency = String(session.currency || '').toUpperCase() || null;
+  console.log('Shopify order created:', order.name || order.id, 'session', sessionId);
+  return buildResult(session, order, false);
+}
 
-  return {
-    orderId: order.id,
-    orderName: order.name || '',
-    email: session.customer_details?.email || order.email || '',
-    alreadyExisted: false,
-    value,
-    currency,
-    contentIds: String(session.metadata?.variant_ids || '')
-      .split(',')
-      .map((id) => id.trim())
-      .filter(Boolean),
-  };
+export async function completeOrderFromStripeSession(sessionId) {
+  return fulfillPaidCheckoutSession(sessionId, { allowUnpaid: false });
 }

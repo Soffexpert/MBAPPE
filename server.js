@@ -4,16 +4,120 @@ import {
   createEmbeddedCheckoutSession,
   updateCheckoutShipping,
 } from './stripe-checkout.js';
-import { completeOrderFromStripeSession, fulfillPaidCheckoutSession } from './order-complete.js';
+import * as orderComplete from './order-complete.js';
+import { createShopifyOrderFromSession } from './shopify-order.js';
 import { handleSellSofa, getSellSofaMailStatus } from './sell-sofa.js';
 import {
   syncAbandonedCheckoutFromStripeSession,
   createAbandonedCheckoutFromCart,
+  closeAbandonedCheckout,
 } from './shopify-abandoned-checkout.js';
 import { getShopifyAccessToken } from './shopify-auth.js';
 import { getAdminStoreHost } from './shopify-store.js';
 
 const PORT = process.env.PORT || 3000;
+
+/**
+ * Prefer order-complete.fulfillPaidCheckoutSession when present.
+ * Fallback keeps the server booting if an older order-complete.js was deployed.
+ */
+async function fulfillPaidCheckoutSession(sessionId, { allowUnpaid = false } = {}) {
+  if (typeof orderComplete.fulfillPaidCheckoutSession === 'function') {
+    return orderComplete.fulfillPaidCheckoutSession(sessionId, { allowUnpaid });
+  }
+
+  if (!sessionId) throw new Error('Saknar session_id.');
+
+  const stripeKey = process.env.STRIPE_SECRET_KEY;
+  if (!stripeKey) throw new Error('STRIPE_SECRET_KEY saknas.');
+  const stripe = new Stripe(stripeKey);
+  const session = await stripe.checkout.sessions.retrieve(sessionId);
+
+  if (session.metadata?.shopify_order_id) {
+    return {
+      orderId: session.metadata.shopify_order_id,
+      orderName: session.metadata.shopify_order_name || '',
+      email: session.customer_details?.email || '',
+      alreadyExisted: true,
+      paymentStatus: session.payment_status,
+      value:
+        typeof session.amount_total === 'number' ? session.amount_total / 100 : null,
+      currency: String(session.currency || '').toUpperCase() || null,
+      contentIds: String(session.metadata?.variant_ids || '')
+        .split(',')
+        .map((id) => id.trim())
+        .filter(Boolean),
+    };
+  }
+
+  const paid =
+    session.payment_status === 'paid' ||
+    session.payment_status === 'no_payment_required';
+
+  if (!paid) {
+    if (allowUnpaid) {
+      return {
+        pending: true,
+        paymentStatus: session.payment_status,
+        orderId: null,
+        orderName: '',
+        email: session.customer_details?.email || '',
+        alreadyExisted: false,
+        value: null,
+        currency: null,
+        contentIds: [],
+      };
+    }
+    const err = new Error('Betalningen är inte slutförd ännu.');
+    err.code = 'PAYMENT_PENDING';
+    err.paymentStatus = session.payment_status;
+    throw err;
+  }
+
+  if (typeof orderComplete.completeOrderFromStripeSession === 'function') {
+    return orderComplete.completeOrderFromStripeSession(sessionId);
+  }
+
+  const order = await createShopifyOrderFromSession(stripe, session);
+  await stripe.checkout.sessions.update(sessionId, {
+    metadata: {
+      ...(session.metadata || {}),
+      shopify_order_id: String(order.id),
+      shopify_order_name: order.name || '',
+    },
+  });
+  try {
+    await closeAbandonedCheckout(session.metadata?.shopify_checkout_token);
+  } catch (error) {
+    console.error('closeAbandonedCheckout:', error.message || error);
+  }
+
+  return {
+    orderId: order.id,
+    orderName: order.name || '',
+    email: session.customer_details?.email || order.email || '',
+    alreadyExisted: false,
+    paymentStatus: session.payment_status,
+    value:
+      typeof session.amount_total === 'number' ? session.amount_total / 100 : null,
+    currency: String(session.currency || '').toUpperCase() || null,
+    contentIds: String(session.metadata?.variant_ids || '')
+      .split(',')
+      .map((id) => id.trim())
+      .filter(Boolean),
+  };
+}
+
+async function completeOrderFromStripeSession(sessionId) {
+  if (typeof orderComplete.completeOrderFromStripeSession === 'function') {
+    // New module delegates to fulfillPaidCheckoutSession internally
+    if (typeof orderComplete.fulfillPaidCheckoutSession === 'function') {
+      return orderComplete.fulfillPaidCheckoutSession(sessionId, { allowUnpaid: false });
+    }
+    return orderComplete.completeOrderFromStripeSession(sessionId);
+  }
+  return fulfillPaidCheckoutSession(sessionId, { allowUnpaid: false });
+}
 
 function sendJson(res, status, payload) {
   res.writeHead(status, {
