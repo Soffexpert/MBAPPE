@@ -4,12 +4,10 @@ import {
   createEmbeddedCheckoutSession,
   updateCheckoutShipping,
 } from './stripe-checkout.js';
-import { createShopifyOrderFromSession } from './shopify-order.js';
-import { completeOrderFromStripeSession } from './order-complete.js';
+import { completeOrderFromStripeSession, fulfillPaidCheckoutSession } from './order-complete.js';
 import { handleSellSofa, getSellSofaMailStatus } from './sell-sofa.js';
 import {
   syncAbandonedCheckoutFromStripeSession,
-  closeAbandonedCheckout,
   createAbandonedCheckoutFromCart,
 } from './shopify-abandoned-checkout.js';
 import { getShopifyAccessToken } from './shopify-auth.js';
@@ -137,29 +135,41 @@ async function handleWebhook(req, res) {
     }
   }
 
-  if (event.type === 'checkout.session.completed') {
+  // Klarna/async: completed may be unpaid — also listen for async_payment_succeeded
+  if (
+    event.type === 'checkout.session.completed' ||
+    event.type === 'checkout.session.async_payment_succeeded'
+  ) {
     try {
       const session = event.data.object;
-      if (!session.metadata?.shopify_order_id) {
-        const order = await createShopifyOrderFromSession(stripe, session);
-        await stripe.checkout.sessions.update(session.id, {
-          metadata: {
-            ...session.metadata,
-            shopify_order_id: String(order.id),
-            shopify_order_name: order.name || '',
-          },
-        });
-        await closeAbandonedCheckout(session.metadata?.shopify_checkout_token);
-        console.log('Shopify order created:', order.name || order.id);
+      const result = await fulfillPaidCheckoutSession(session.id, { allowUnpaid: true });
+      if (result.pending) {
+        console.log(
+          'Checkout completed but payment still pending:',
+          session.id,
+          result.paymentStatus
+        );
       } else {
-        console.log('Shopify order already exists:', session.metadata.shopify_order_name);
+        console.log(
+          'Fulfillment ok:',
+          result.orderName || result.orderId,
+          'already=',
+          result.alreadyExisted,
+          'event=',
+          event.type
+        );
       }
     } catch (error) {
       console.error('Shopify order failed:', error);
+      // 500 so Stripe retries — critical for Klarna delayed capture
       res.writeHead(500);
       res.end(`Shopify order error: ${error.message}`);
       return;
     }
+  }
+
+  if (event.type === 'checkout.session.async_payment_failed') {
+    console.error('Async payment failed for session', event.data.object?.id);
   }
 
   res.writeHead(200);
@@ -267,7 +277,69 @@ async function handleCompleteOrder(req, res) {
     sendJson(res, 200, result);
   } catch (error) {
     console.error('complete-order:', error);
-    sendJson(res, 400, { error: error.message || 'Kunde inte slutföra ordern.' });
+    sendJson(res, 400, {
+      error: error.message || 'Kunde inte slutföra ordern.',
+      code: error.code || null,
+      paymentStatus: error.paymentStatus || null,
+    });
+  }
+}
+
+/** Manual recovery: create Shopify order from a paid Stripe session_id */
+async function handleRecoverOrder(req, res) {
+  try {
+    const body = await readJson(req).catch(() => ({}));
+    const sessionId =
+      body.session_id || body.sessionId || new URL(req.url, 'http://x').searchParams.get('session_id');
+    if (!sessionId) {
+      sendJson(res, 400, { error: 'Skicka { "session_id": "cs_..." }' });
+      return;
+    }
+    const result = await fulfillPaidCheckoutSession(sessionId);
+    sendJson(res, 200, result);
+  } catch (error) {
+    console.error('recover-order:', error);
+    sendJson(res, 400, { error: error.message || 'Kunde inte återskapa order.' });
+  }
+}
+
+async function handleDebugOrder(req, res) {
+  try {
+    const body = await readJson(req).catch(() => ({}));
+    const { store, token } = await getShopifyAccessToken();
+    const adminStore = getAdminStoreHost(store);
+    const scopesRes = await fetch(
+      `https://${adminStore}/admin/oauth/access_scopes.json`,
+      { headers: { 'X-Shopify-Access-Token': token } }
+    );
+    const scopesData = await scopesRes.json().catch(() => ({}));
+    const scopeStr = JSON.stringify(scopesData);
+
+    let fulfill = null;
+    let fulfillError = null;
+    if (body.session_id) {
+      try {
+        fulfill = await fulfillPaidCheckoutSession(body.session_id);
+      } catch (error) {
+        fulfillError = error.message || String(error);
+      }
+    }
+
+    sendJson(res, 200, {
+      store: adminStore,
+      hasWriteOrders: scopeStr.includes('write_orders'),
+      hasWriteProducts: scopeStr.includes('write_products'),
+      hasWriteDraftOrders: scopeStr.includes('write_draft_orders'),
+      scopes: scopesData,
+      fulfill,
+      fulfillError,
+      hint: body.session_id
+        ? null
+        : 'POST {"session_id":"cs_..."} to fulfill a paid Stripe session now',
+    });
+  } catch (error) {
+    console.error('debug-order:', error);
+    sendJson(res, 500, { error: error.message || 'Debug failed.' });
   }
 }
 
@@ -305,6 +377,19 @@ const server = http.createServer(async (req, res) => {
 
   if (req.method === 'POST' && path === '/complete-order') {
     await handleCompleteOrder(req, res);
+    return;
+  }
+
+  if (req.method === 'POST' && path === '/recover-order') {
+    await handleRecoverOrder(req, res);
+    return;
+  }
+
+  if (
+    (req.method === 'GET' || req.method === 'POST') &&
+    path === '/debug-order'
+  ) {
+    await handleDebugOrder(req, res);
     return;
   }
 
