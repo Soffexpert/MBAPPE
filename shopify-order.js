@@ -264,66 +264,70 @@ export async function unlistProductsAfterPurchase(adminStore, token, productIds)
 }
 
 async function tryCompleteDraftOrder(adminStore, token, session) {
-  const draftId = session.metadata?.shopify_checkout_token;
-  if (!draftId || !/^\d+$/.test(String(draftId))) return null;
+  // Disabled: completing draft + REST create caused duplicate orders
+  // (one with product variants, one with custom price lines) under race conditions.
+  // Abandoned drafts are closed after REST order create instead.
+  return null;
+}
 
-  const shippingAddress = getAddress(session);
-  const customerEmail = session.customer_details?.email;
-  const orderNote = getOrderNote(session);
+async function findOrderByStripeSessionId(sessionId) {
+  if (!sessionId) return null;
+  const { store, token } = await getShopifyAccessToken();
+  const adminStore = getAdminStoreHost(store);
+  const tag = stripeSessionTag(sessionId);
 
-  // Refresh draft with final customer data before completing
-  const draftUpdate = {
-    draft_order: {
-      note: [
-        'Betald via Stripe Embedded Checkout (Klarna/kort).',
-        orderNote ? `Kundanteckning: ${orderNote}` : '',
-        `Stripe session: ${session.id}`,
-      ]
-        .filter(Boolean)
-        .join('\n'),
-      tags: 'stripe,embedded-checkout',
+  const { response, data } = await adminFetch(adminStore, token, '/graphql.json', {
+    method: 'POST',
+    body: {
+      query: `
+        query FindStripeOrder($q: String!) {
+          orders(first: 5, query: $q, sortKey: CREATED_AT, reverse: true) {
+            edges {
+              node {
+                id
+                name
+                legacyResourceId
+                tags
+                note
+              }
+            }
+          }
+        }
+      `,
+      variables: {
+        q: `tag:${tag} OR note:${sessionId}`,
+      },
     },
-  };
-  if (customerEmail) draftUpdate.draft_order.email = customerEmail;
-  if (shippingAddress) {
-    draftUpdate.draft_order.shipping_address = shippingAddress;
-    draftUpdate.draft_order.billing_address = shippingAddress;
-  }
-
-  await adminFetch(adminStore, token, `/draft_orders/${draftId}.json`, {
-    method: 'PUT',
-    body: draftUpdate,
-  }).catch((error) => {
-    console.warn('draft update before complete failed:', error.message);
   });
 
-  const { response, data } = await adminFetch(
-    adminStore,
-    token,
-    `/draft_orders/${draftId}/complete.json?payment_pending=false`,
-    { method: 'PUT' }
-  );
-
-  if (!response.ok) {
-    console.warn('draft complete failed, will create order instead:', JSON.stringify(data));
+  if (!response.ok || data.errors?.length) {
+    console.warn('findOrderByStripeSessionId failed:', JSON.stringify(data.errors || data));
     return null;
   }
 
-  const orderId = data.draft_order?.order_id;
-  if (!orderId) {
-    console.warn('draft complete returned no order_id', JSON.stringify(data));
-    return null;
+  const edges = data.data?.orders?.edges || [];
+  for (const edge of edges) {
+    const node = edge.node;
+    const note = node.note || '';
+    const tags = node.tags || [];
+    if (note.includes(sessionId) || tags.includes(tag)) {
+      return {
+        id: Number(node.legacyResourceId),
+        name: node.name,
+        email: '',
+      };
+    }
   }
-
-  const orderRes = await adminFetch(adminStore, token, `/orders/${orderId}.json`);
-  if (!orderRes.response.ok || !orderRes.data.order) {
-    console.warn('could not load completed draft order', orderId);
-    return null;
-  }
-
-  console.log('Order created by completing draft', draftId, '→', orderRes.data.order.name);
-  return orderRes.data.order;
+  return null;
 }
+
+function stripeSessionTag(sessionId) {
+  // Shopify tags max ~40 useful chars for filtering; keep stable unique suffix
+  const cleaned = String(sessionId).replace(/[^a-zA-Z0-9_]/g, '');
+  return `sid_${cleaned.slice(-24)}`;
+}
+
+export { findOrderByStripeSessionId };
 
 async function createOrderViaRest(adminStore, token, session, orderLineItems) {
   const shippingAddress = getAddress(session);
@@ -332,8 +336,11 @@ async function createOrderViaRest(adminStore, token, session, orderLineItems) {
   const discountTotal = (session.total_details?.amount_discount || 0) / 100;
   const shippingLabel = getShippingLabel(session);
   const customerEmail = session.customer_details?.email;
+  const sidTag = stripeSessionTag(session.id);
 
   // Do NOT send currency — many shops reject it and the whole create fails.
+  // One path only: variant line items (product). No second custom-price attempt
+  // that could create a second order type if the first actually succeeded.
   const orderPayload = {
     order: {
       email: customerEmail,
@@ -349,6 +356,9 @@ async function createOrderViaRest(adminStore, token, session, orderLineItems) {
       ]
         .filter(Boolean)
         .join('\n'),
+      note_attributes: [
+        { name: 'stripe_session_id', value: session.id },
+      ],
       line_items: stripInternalFields(orderLineItems),
       shipping_lines:
         shippingTotal > 0
@@ -368,7 +378,7 @@ async function createOrderViaRest(adminStore, token, session, orderLineItems) {
           gateway: 'Stripe',
         },
       ],
-      tags: 'stripe,embedded-checkout',
+      tags: `stripe,embedded-checkout,${sidTag}`,
     },
   };
 
@@ -390,21 +400,24 @@ async function createOrderViaRest(adminStore, token, session, orderLineItems) {
     orderPayload.order.billing_address = shippingAddress;
   }
 
+  // Prefer variant_id lines. If Shopify rejects variants, use custom title lines
+  // in the SAME request path (still a single create — never two creates).
   let { response, data } = await adminFetch(adminStore, token, '/orders.json', {
     method: 'POST',
     body: orderPayload,
   });
 
-  // Retry with custom line items (title) if variant_id rejected
   if (!response.ok) {
-    console.error('Shopify order create failed (attempt 1):', JSON.stringify(data));
-    const customItems = orderLineItems.map((item) => ({
+    console.error('Shopify order create failed (variants):', JSON.stringify(data));
+    const already = await findOrderByStripeSessionId(session.id);
+    if (already) return already;
+
+    orderPayload.order.line_items = orderLineItems.map((item) => ({
       title: item._title || 'Produkt',
       quantity: item.quantity || 1,
       price: item.price || '0.00',
       requires_shipping: true,
     }));
-    orderPayload.order.line_items = customItems;
     ({ response, data } = await adminFetch(adminStore, token, '/orders.json', {
       method: 'POST',
       body: orderPayload,
@@ -412,7 +425,9 @@ async function createOrderViaRest(adminStore, token, session, orderLineItems) {
   }
 
   if (!response.ok) {
-    console.error('Shopify order create failed (attempt 2):', JSON.stringify(data));
+    const already = await findOrderByStripeSessionId(session.id);
+    if (already) return already;
+    console.error('Shopify order create failed:', JSON.stringify(data));
     throw new Error(
       data.errors ? JSON.stringify(data.errors) : 'Kunde inte skapa Shopify-order.'
     );
@@ -425,6 +440,13 @@ export async function createShopifyOrderFromSession(stripe, session) {
   const { store, token } = await getShopifyAccessToken();
   const adminStore = getAdminStoreHost(store);
 
+  // Idempotent: never create a second order for the same Stripe session
+  const existing = await findOrderByStripeSessionId(session.id);
+  if (existing) {
+    console.log('Reusing existing Shopify order for session', session.id, existing.name);
+    return existing;
+  }
+
   const { orderLineItems, productIds: metaProductIds } = await buildLineItemsFromStripe(
     stripe,
     session
@@ -434,15 +456,10 @@ export async function createShopifyOrderFromSession(stripe, session) {
     throw new Error('Inga produktrader att skapa order från.');
   }
 
-  // 1) Prefer completing existing abandoned draft (most reliable when present)
-  let order = await tryCompleteDraftOrder(adminStore, token, session);
+  // Single create path (REST). Do not also complete abandoned draft.
+  const order = await createOrderViaRest(adminStore, token, session, orderLineItems);
 
-  // 2) Otherwise create a paid order via REST
-  if (!order) {
-    order = await createOrderViaRest(adminStore, token, session, orderLineItems);
-  }
-
-  // 3) Unlist bought products (draft = olistad / hidden)
+  // Unlist bought products (draft = olistad / hidden)
   try {
     const productIds = await resolveProductIdsFromVariants(
       adminStore,
@@ -459,7 +476,7 @@ export async function createShopifyOrderFromSession(stripe, session) {
     console.error('unlist after purchase failed:', error.message || error);
   }
 
-  // 4) Email — never fail the order if mail fails
+  // Email — never fail the order if mail fails
   try {
     await notifyCustomerAboutOrder(adminStore, token, order);
   } catch (error) {

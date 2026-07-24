@@ -1,5 +1,8 @@
 import Stripe from 'stripe';
-import { createShopifyOrderFromSession } from './shopify-order.js';
+import {
+  createShopifyOrderFromSession,
+  findOrderByStripeSessionId,
+} from './shopify-order.js';
 import { closeAbandonedCheckout } from './shopify-abandoned-checkout.js';
 
 function getStripe() {
@@ -25,9 +28,60 @@ function buildResult(session, order, alreadyExisted) {
   };
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Prevent webhook + thank-you from both creating orders (race).
+ * Claims a lock in Stripe metadata; losers wait for the winner's shopify_order_id.
+ */
+async function claimOrWaitForFulfillment(stripe, sessionId) {
+  for (let attempt = 0; attempt < 12; attempt++) {
+    const session = await stripe.checkout.sessions.retrieve(sessionId);
+
+    if (session.metadata?.shopify_order_id) {
+      return { session, alreadyExisted: true };
+    }
+
+    const lock = session.metadata?.shopify_fulfillment_lock || '';
+    const lockAgeMs = lock ? Date.now() - Number(lock) : Infinity;
+    const lockHeldByOther = lock && Number.isFinite(lockAgeMs) && lockAgeMs >= 0 && lockAgeMs < 90_000;
+
+    if (!lockHeldByOther) {
+      const lockValue = String(Date.now());
+      await stripe.checkout.sessions.update(sessionId, {
+        metadata: {
+          ...(session.metadata || {}),
+          shopify_fulfillment_lock: lockValue,
+        },
+      });
+
+      // Re-read — if another worker wrote order id or a newer lock, back off
+      const claimed = await stripe.checkout.sessions.retrieve(sessionId);
+      if (claimed.metadata?.shopify_order_id) {
+        return { session: claimed, alreadyExisted: true };
+      }
+      if (claimed.metadata?.shopify_fulfillment_lock === lockValue) {
+        return { session: claimed, alreadyExisted: false };
+      }
+    }
+
+    await sleep(800 + attempt * 200);
+  }
+
+  const session = await stripe.checkout.sessions.retrieve(sessionId);
+  if (session.metadata?.shopify_order_id) {
+    return { session, alreadyExisted: true };
+  }
+
+  // Stale lock — proceed carefully; findExistingOrder will still guard
+  return { session, alreadyExisted: false };
+}
+
 /**
  * Create Shopify order only when Stripe payment is actually paid.
- * Safe to call from webhook (completed / async_payment_succeeded) and thank-you page.
+ * Safe to call from webhook + thank-you concurrently (idempotent).
  */
 export async function fulfillPaidCheckoutSession(sessionId, { allowUnpaid = false } = {}) {
   if (!sessionId) {
@@ -35,7 +89,7 @@ export async function fulfillPaidCheckoutSession(sessionId, { allowUnpaid = fals
   }
 
   const stripe = getStripe();
-  const session = await stripe.checkout.sessions.retrieve(sessionId, {
+  let session = await stripe.checkout.sessions.retrieve(sessionId, {
     expand: ['total_details', 'customer_details'],
   });
 
@@ -67,6 +121,30 @@ export async function fulfillPaidCheckoutSession(sessionId, { allowUnpaid = fals
     throw err;
   }
 
+  // Deduplicate concurrent fulfill calls (webhook + thank-you page)
+  const claimed = await claimOrWaitForFulfillment(stripe, sessionId);
+  session = claimed.session;
+  if (claimed.alreadyExisted || session.metadata?.shopify_order_id) {
+    return buildResult(session, null, true);
+  }
+
+  // Extra guard: order may exist even if metadata write failed earlier
+  const existing = await findOrderByStripeSessionId(sessionId);
+  if (existing) {
+    await stripe.checkout.sessions.update(sessionId, {
+      metadata: {
+        ...(session.metadata || {}),
+        shopify_order_id: String(existing.id),
+        shopify_order_name: existing.name || '',
+      },
+    });
+    return buildResult(
+      { ...session, metadata: { ...session.metadata, shopify_order_id: String(existing.id), shopify_order_name: existing.name || '' } },
+      existing,
+      true
+    );
+  }
+
   const order = await createShopifyOrderFromSession(stripe, session);
 
   await stripe.checkout.sessions.update(sessionId, {
@@ -74,6 +152,7 @@ export async function fulfillPaidCheckoutSession(sessionId, { allowUnpaid = fals
       ...(session.metadata || {}),
       shopify_order_id: String(order.id),
       shopify_order_name: order.name || '',
+      shopify_fulfillment_lock: session.metadata?.shopify_fulfillment_lock || String(Date.now()),
     },
   });
 
