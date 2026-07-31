@@ -1,0 +1,91 @@
+{% comment %}
+  Snippet: fargprickar for produkter med taggen soffa-grupp.
+
+  INSTALLATION (Shopify Admin):
+  1. Webbshop -> Teman -> ... -> Redigera kod
+  2. Skapa snippets/sofa-grupp-dots.liquid och klistra in DENNA FIL
+  3. Oppna snippets/card-product.liquid
+  4. Hitta raden med:  {% render 'price', product: card_product
+     Direkt EFTER price-blocket (efter den raden / endif som hor till price),
+     lagg till:
+
+       {% render 'sofa-grupp-dots', product: card_product %}
+
+  5. Ta bort den fristaende "Anpassad liquid"-sektionen med soffkortet
+     (den ligger utanfor rutnatet).
+
+  Taggar per farg-SKU:
+  - soffa-grupp
+  - farg:Beige  (eller farg:Bla, ...)
+{% endcomment %}
+
+{% if product != blank and product.tags contains 'soffa-grupp' %}
+  {% assign color_tag_prefix = 'farg:' %}
+  {% assign group_source = collections.soffgrupp %}
+  {% if group_source == blank or group_source.products.size == 0 %}
+    {% assign group_source = collections['alla-soffor'] %}
+  {% endif %}
+
+  {% if group_source != blank %}
+    {% assign dot_count = 0 %}
+    {% for sibling in group_source.products %}
+      {% if sibling.tags contains 'soffa-grupp' %}
+        {% assign dot_count = dot_count | plus: 1 %}
+      {% endif %}
+    {% endfor %}
+
+    {% if dot_count > 0 %}
+      <ul
+        class="sofa-grupp-dots"
+        role="list"
+        aria-label="Tillgängliga färger"
+        style="display:flex;flex-wrap:wrap;gap:8px;list-style:none;margin:8px 0 0;padding:0;"
+      >
+        {% for sibling in group_source.products %}
+          {% if sibling.tags contains 'soffa-grupp' %}
+            {% assign color_name = '' %}
+            {% assign prefix_down = color_tag_prefix | downcase %}
+            {% for tag in sibling.tags %}
+              {% assign tag_down = tag | downcase %}
+              {% if tag_down contains prefix_down %}
+                {% assign color_parts = tag | split: ':' %}
+                {% assign color_name = color_parts | last | strip %}
+              {% endif %}
+            {% endfor %}
+            {% if color_name == blank %}
+              {% assign title_parts = sibling.title | split: '-' %}
+              {% assign color_name = title_parts | last | strip %}
+            {% endif %}
+
+            {% assign ring = '' %}
+            {% if sibling.id == product.id %}
+              {% assign ring = 'box-shadow:0 0 0 2px #111;' %}
+            {% endif %}
+            {% unless sibling.available %}
+              {% assign ring = ring | append: 'opacity:0.35;' %}
+            {% endunless %}
+
+            <li>
+              {% if sibling.featured_image != blank %}
+                <a
+                  href="{{ sibling.url }}"
+                  title="{{ color_name | escape }}"
+                  aria-label="{{ color_name | escape }}"
+                  style="width:16px;height:16px;border-radius:50%;display:inline-block;background-size:cover;background-position:center;border:1px solid #ccc;box-sizing:border-box;background-image:url({{ sibling.featured_image | image_url: width: 64 }});{{ ring }}"
+                ><span class="visually-hidden">{{ color_name | escape }}</span></a>
+              {% else %}
+                {% assign css_color = color_name | handleize | replace: '-', '' %}
+                <a
+                  href="{{ sibling.url }}"
+                  title="{{ color_name | escape }}"
+                  aria-label="{{ color_name | escape }}"
+                  style="width:16px;height:16px;border-radius:50%;display:inline-block;border:1px solid #ccc;box-sizing:border-box;background-color:{{ css_color }};{{ ring }}"
+                ><span class="visually-hidden">{{ color_name | escape }}</span></a>
+              {% endif %}
+            </li>
+          {% endif %}
+        {% endfor %}
+      </ul>
+    {% endif %}
+  {% endif %}
+{% endif %}

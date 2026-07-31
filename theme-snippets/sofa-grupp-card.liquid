@@ -1,114 +1,23 @@
-{% assign sofa_group_tag = 'soffa-grupp' %}
-{% assign color_tag_prefix = 'farg:' %}
-{% assign main_sofa = false %}
-{% assign color_count = 0 %}
-{% assign sofa_collection = collections.soffgrupp %}
+{% comment %}
+  TA BORT DENNA "Anpassad liquid"-SEKTION.
 
-{% if sofa_collection != blank %}
-  {% for p in sofa_collection.products %}
-    {% if p.tags contains sofa_group_tag %}
-      {% assign color_count = color_count | plus: 1 %}
-      {% unless main_sofa %}
-        {% assign main_sofa = p %}
-      {% endunless %}
-    {% endif %}
-  {% endfor %}
-{% endif %}
+  Soffkortet ska inte langre ligga som egen sektion utanfor
+  produktnatet. Integrationen sker i temats produktkort:
 
-{% unless main_sofa %}
-  {% assign sofa_collection = collections['alla-soffor'] %}
-  {% assign color_count = 0 %}
-  {% if sofa_collection != blank %}
-    {% for p in sofa_collection.products %}
-      {% if p.tags contains sofa_group_tag %}
-        {% assign color_count = color_count | plus: 1 %}
-        {% unless main_sofa %}
-          {% assign main_sofa = p %}
-        {% endunless %}
-      {% endif %}
-    {% endfor %}
-  {% endif %}
-{% endunless %}
+  1. Skapa snippets/sofa-grupp-dots.liquid
+     (innehall: theme-snippets/sofa-grupp-dots.liquid)
 
-{% if main_sofa %}
-  <div style="max-width:420px;margin:0 auto;display:grid;gap:12px;">
-    <a href="{{ main_sofa.url }}" style="display:block;aspect-ratio:4/3;overflow:hidden;background:#f3f3f3;">
-      {% if main_sofa.featured_image != blank %}
-        <img
-          src="{{ main_sofa.featured_image | image_url: width: 900 }}"
-          alt="{{ main_sofa.title | escape }}"
-          loading="lazy"
-          width="900"
-          height="675"
-          style="width:100%;height:100%;object-fit:cover;display:block;"
-        >
-      {% endif %}
-    </a>
+  2. I snippets/card-product.liquid, efter price-raden:
+     {% render 'sofa-grupp-dots', product: card_product %}
 
-    <div style="display:grid;gap:6px;">
-      <h3 style="margin:0;font-size:1.1rem;font-weight:600;line-height:1.3;">
-        <a href="{{ main_sofa.url }}" style="color:inherit;text-decoration:none;">{{ main_sofa.title | escape }}</a>
-      </h3>
+  3. I sections/main-collection-product-grid.liquid
+     (och featured-collection.liquid), inuti for-loopen
+     fore <li class="grid__item">:
+     klistra in koden fran sofa-grupp-skip-check.liquid
 
-      <div style="display:flex;gap:8px;align-items:baseline;">
-        {% if main_sofa.compare_at_price > main_sofa.price %}
-          <s style="opacity:0.65;">{{ main_sofa.compare_at_price | money }}</s>
-        {% endif %}
-        <span>{{ main_sofa.price | money }}</span>
-      </div>
-
-      {% if color_count > 0 %}
-        <ul role="list" style="display:flex;flex-wrap:wrap;gap:8px;list-style:none;margin:6px 0 0;padding:0;">
-          {% for color_product in sofa_collection.products %}
-            {% if color_product.tags contains sofa_group_tag %}
-              {% assign color_name = '' %}
-              {% assign prefix_down = color_tag_prefix | downcase %}
-
-              {% for tag in color_product.tags %}
-                {% assign tag_down = tag | downcase %}
-                {% if tag_down contains prefix_down %}
-                  {% assign color_parts = tag | split: ':' %}
-                  {% assign color_name = color_parts | last | strip %}
-                {% endif %}
-              {% endfor %}
-
-              {% if color_name == blank %}
-                {% assign title_parts = color_product.title | split: '-' %}
-                {% assign color_name = title_parts | last | strip %}
-              {% endif %}
-
-              {% assign ring = '' %}
-              {% if color_product.id == main_sofa.id %}
-                {% assign ring = 'box-shadow:0 0 0 2px #111;' %}
-              {% endif %}
-              {% unless color_product.available %}
-                {% assign ring = ring | append: 'opacity:0.35;' %}
-              {% endunless %}
-
-              <li>
-                {% if color_product.featured_image != blank %}
-                  <a
-                    href="{{ color_product.url }}"
-                    title="{{ color_name | escape }}"
-                    aria-label="{{ color_name | escape }}"
-                    style="width:16px;height:16px;border-radius:50%;display:inline-block;background-size:cover;background-position:center;border:1px solid #ccc;box-sizing:border-box;background-image:url({{ color_product.featured_image | image_url: width: 64 }});{{ ring }}"
-                  ><span style="display:none;">{{ color_name | escape }}</span></a>
-                {% else %}
-                  {% assign css_color = color_name | handleize | replace: '-', '' %}
-                  <a
-                    href="{{ color_product.url }}"
-                    title="{{ color_name | escape }}"
-                    aria-label="{{ color_name | escape }}"
-                    style="width:16px;height:16px;border-radius:50%;display:inline-block;border:1px solid #ccc;box-sizing:border-box;background-color:{{ css_color }};{{ ring }}"
-                  ><span style="display:none;">{{ color_name | escape }}</span></a>
-                {% endif %}
-              </li>
-            {% endif %}
-          {% endfor %}
-        </ul>
-      {% endif %}
-    </div>
-  </div>
-{% else %}
-  <p>Ingen soffa hittades. Kontrollera taggen soffa-grupp och collections soffgrupp / alla-soffor.</p>
-{% endif %}
+  4. Ta bort denna Anpassad liquid-sektion fran sidan.
+{% endcomment %}
+<p style="margin:0;padding:12px;border:1px dashed #ccc;font-size:14px;line-height:1.4;">
+  Soffa-grupp ar flyttad till produktnatet. Ta bort den har Anpassad liquid-sektionen
+  och folj installationen i <code>theme-snippets/sofa-grupp-dots.liquid</code>.
+</p>
