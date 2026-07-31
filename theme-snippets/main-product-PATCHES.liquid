@@ -1,0 +1,41 @@
+{% comment %}
+PATCHES for sections/main-product.liquid
+Gor dessa byten i din fil (sok/ersatt).
+{% endcomment %}
+
+{% comment %} === PATCH 1 - ERSATT DETTA === {% endcomment %}
+                            <span data-text="{{ 'products.product.volume_pricing.price_at_each_html' | t: price: variant_price }}">
+                              {{- 'sections.quick_order_list.each' | t: money: price -}}
+                            </span>
+{% comment %} === PATCH 1 - MED DETTA === {% endcomment %}
+                            <span data-text="{{ 'products.product.volume_pricing.price_at_each_html' | t: price: price }}">
+                              {{- 'sections.quick_order_list.each' | t: money: price -}}
+                            </span>
+
+{% comment %} === PATCH 2 - ERSATT DETTA === {% endcomment %}
+                {%- render 'buy-buttons',
+                  block: block,
+                  product: product,
+                  product_form_id: product_form_id,
+                  section_id: section.id,
+                  show_pickup_availability: true,
+                  show_payment_methods: false,
+                  show_buy_area: true -%}
+{% comment %} === PATCH 2 - MED DETTA === {% endcomment %}
+                {%- render 'buy-buttons',
+                  block: block,
+                  product: product,
+                  product_form_id: product_form_id,
+                  section_id: section.id,
+                  show_pickup_availability: true,
+                  show_payment_methods: false,
+                  show_buy_area: true
+                -%}
+
+{% comment %} === PATCH 3 - ERSATT DETTA === {% endcomment %}
+      <div class="grid__item product__media-wrapper" style="position: relative;">
+{% render 'soff-gallery' %}      </div>
+{% comment %} === PATCH 3 - MED DETTA === {% endcomment %}
+      <div class="grid__item product__media-wrapper" style="position: relative;">
+        {% render 'soff-gallery' %}
+      </div>
