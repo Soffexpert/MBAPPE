@@ -1,40 +1,18 @@
 {% comment %}
-  Klistra in DETTA BLOCK i collection/featured-loops
-  precis FORE <li class="grid__item"...>, inuti
-  {% for product in ... %}.
+  Dolj sekundara farger + pinna huvudsoffan forst.
 
-  Effekt: bara EN kort per soffa-grupp visas i rutnatet
-  (produkten med lagst id). Ovriga farger doljs men syns
-  som prickar via sofa-grupp-dots.
+  HUVUDPRODUKT (KRAMEN) – taggar:
+    soffa-grupp
+    soffa-huvud
 
-  FILER ATT ANDRA (Dawn-baserat tema):
+  OVRIGA farg-/tygprodukter som INTE ska synas som egna kort:
+    dolj-i-rutnat
+
+  Klistra in i for-loopen FORE <li class="grid__item"> i:
   - sections/main-collection-product-grid.liquid
   - sections/featured-collection.liquid
-  - sections/main-search.liquid (valfritt)
-
-  Exempel i main-collection-product-grid.liquid:
-
-    {%- for product in collection.products -%}
-      {% comment %} === BORJA SOFFA-GRUPP SKIP === {% endcomment %}
-      ...klistra in koden nedan...
-      {% comment %} === SLUT SOFFA-GRUPP SKIP === {% endcomment %}
-      <li class="grid__item" ...>
-        {% render 'card-product', card_product: product, ... %}
-      </li>
-    {%- endfor -%}
 {% endcomment %}
 
-{% assign skip_sofa_color = false %}
-{% if product.tags contains 'soffa-grupp' %}
-  {% for sibling in collection.products %}
-    {% if sibling.tags contains 'soffa-grupp' %}
-      {% if sibling.id < product.id %}
-        {% assign skip_sofa_color = true %}
-        {% break %}
-      {% endif %}
-    {% endif %}
-  {% endfor %}
-{% endif %}
-{% if skip_sofa_color %}
+{% if product.tags contains 'dolj-i-rutnat' %}
   {% continue %}
 {% endif %}

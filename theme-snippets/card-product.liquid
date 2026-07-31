@@ -39,8 +39,14 @@
     if ratio == 0 or ratio == null
       assign ratio = 1
     endif
+    assign sofa_featured = false
+    if card_product.tags contains 'soffa-huvud' or card_product.tags contains 'soffa-grupp'
+      unless card_product.tags contains 'dolj-i-rutnat'
+        assign sofa_featured = true
+      endunless
+    endif
   -%}
-  <div class="card-wrapper product-card-wrapper underline-links-hover">
+  <div class="card-wrapper product-card-wrapper underline-links-hover{% if sofa_featured %} product-card-wrapper--sofa-featured{% endif %}">
     <div
       class="
         card card--{{ settings.card_style }}
@@ -50,6 +56,7 @@
         {% if extend_height %} card--extend-height{% endif %}
         {% if card_product.featured_media == nil and settings.card_style == 'card' %} ratio{% endif %}
         {% if horizontal_class %} card--horizontal{% endif %}
+        {% if sofa_featured %} card--sofa-featured{% endif %}
       "
       style="--ratio-percent: {{ 1 | divided_by: ratio | times: 100 }}%;"
     >
@@ -207,6 +214,22 @@
 
             {% render 'price', product: card_product, price_class: '', show_compare_at_price: true %}
             {% render 'sofa-grupp-dots', product: card_product %}
+            {%- if sofa_featured -%}
+              <style>
+                .product-card-wrapper--sofa-featured .card--sofa-featured {
+                  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.14), 0 2px 8px rgba(0, 0, 0, 0.08);
+                  border-radius: var(--product-card-corner-radius, 1.6rem);
+                }
+                .product-card-wrapper--sofa-featured .card__media,
+                .product-card-wrapper--sofa-featured .media {
+                  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.16);
+                }
+                .product-card-wrapper--sofa-featured .card__inner {
+                  overflow: hidden;
+                  border-radius: var(--product-card-corner-radius, 1.6rem);
+                }
+              </style>
+            {%- endif -%}
             {%- if card_product.quantity_price_breaks_configured? -%}
               {% if card_product.variants_count == 1 and quick_add == 'bulk' %}
                 {% liquid

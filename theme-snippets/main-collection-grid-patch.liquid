@@ -1,0 +1,54 @@
+{% comment %}
+  PATCH for sections/main-collection-product-grid.liquid
+  (och motsvarande loop i featured-collection.liquid)
+
+  HITTA loopen som ser ut ungefar sa har:
+
+    {%- for product in collection.products -%}
+      <li
+        class="grid__item ...
+        ...
+        {% render 'card-product',
+          card_product: product,
+          ...
+
+  ERSATT borjan av loopen med blocket nedan
+  (behall resten av <li> och card-product oforandrat).
+
+  Taggar:
+  - soffa-huvud  = KRAMEN som ska synas forst + vara utmarkt
+  - dolj-i-rutnat = dolda fargvarianter (visas bara som prickar)
+{% endcomment %}
+
+{%- for product in collection.products -%}
+  {% if product.tags contains 'dolj-i-rutnat' %}
+    {% continue %}
+  {% endif %}
+
+  <li
+    class="grid__item{% if product.tags contains 'soffa-huvud' %} grid__item--sofa-first{% endif %}{% if settings.animations_reveal_on_scroll %} scroll-trigger animate--slide-in{% endif %}"
+    {% if settings.animations_reveal_on_scroll %}
+      data-cascade
+      style="--animation-order: {{ forloop.index }};{% if product.tags contains 'soffa-huvud' %} order: -1;{% endif %}"
+    {% elsif product.tags contains 'soffa-huvud' %}
+      style="order: -1;"
+    {% endif %}
+  >
+    {% comment %}
+      ... behall befintlig {% render 'card-product', ... %} har ...
+    {% endcomment %}
+  </li>
+{%- endfor -%}
+
+{% comment %}
+  Lagg aven denna CSS en gang i samma section-fil
+  (t.ex. sist fore {% schema %}), eller i theme.liquid:
+
+  <style>
+    #product-grid { display: grid; }
+    #product-grid .grid__item--sofa-first { order: -1; }
+  </style>
+
+  Dawn anvander redan display:grid pa .product-grid,
+  sa order: -1 pa li.grid__item--sofa-first racker.
+{% endcomment %}
