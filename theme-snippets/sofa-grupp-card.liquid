@@ -1,113 +1,107 @@
-{% comment %}
-  PASTA IN I: Anpassa tema → Lägg till sektion → Anpassad liquid
-
-  FIX (2026-07-31):
-  - Collection-handtaget "sofas" finns inte i butiken → gav felmeddelandet
-    "Ingen soffa hittades…".
-  - Rätt collection för "Soffgrupp" har handle: soffgrupp
-  - Produkter med taggen soffa-grupp ligger i praktiken i alla-soffor
-    (soffgrupp syns tom i butiken). Snippeten faller därför tillbaka till
-    alla-soffor om soffgrupp saknar synliga produkter.
-
-  TAGGS (behövs på varje färg-SKU):
-  1. Grupptagg: soffa-grupp
-  2. Färg-tagg: farg:Beige  (eller farg:Blå, …)
-{% endcomment %}
-
 {% assign sofa_group_tag = 'soffa-grupp' %}
-{% assign collection_handle = 'soffgrupp' %}
-{% assign fallback_collection_handle = 'alla-soffor' %}
 {% assign color_tag_prefix = 'farg:' %}
-
-{% assign sofa_collection = collections[collection_handle] %}
-{% assign main_sofa = nil %}
+{% assign main_sofa = false %}
 {% assign color_count = 0 %}
+{% assign sofa_collection = collections.soffgrupp %}
 
 {% if sofa_collection != blank %}
   {% for p in sofa_collection.products %}
     {% if p.tags contains sofa_group_tag %}
       {% assign color_count = color_count | plus: 1 %}
-      {% if main_sofa == nil %}
+      {% unless main_sofa %}
         {% assign main_sofa = p %}
-      {% endif %}
+      {% endunless %}
     {% endif %}
   {% endfor %}
 {% endif %}
 
-{% if main_sofa == blank %}
-  {% assign collection_handle = fallback_collection_handle %}
-  {% assign sofa_collection = collections[collection_handle] %}
+{% unless main_sofa %}
+  {% assign sofa_collection = collections['alla-soffor'] %}
   {% assign color_count = 0 %}
-
   {% if sofa_collection != blank %}
     {% for p in sofa_collection.products %}
       {% if p.tags contains sofa_group_tag %}
         {% assign color_count = color_count | plus: 1 %}
-        {% if main_sofa == nil %}
+        {% unless main_sofa %}
           {% assign main_sofa = p %}
-        {% endif %}
+        {% endunless %}
       {% endif %}
     {% endfor %}
   {% endif %}
-{% endif %}
+{% endunless %}
 
-{% if main_sofa != blank %}
-  <div class="cl-sofa">
-    <a class="cl-sofa__media" href="{{ main_sofa.url }}">
-      {% if main_sofa.featured_image %}
-        {{ main_sofa.featured_image | image_url: width: 900 | image_tag: loading: 'lazy', class: 'cl-sofa__image', alt: main_sofa.title }}
-      {% else %}
-        {{ 'product-1' | placeholder_svg_tag: 'cl-sofa__image' }}
+{% if main_sofa %}
+  <div style="max-width:420px;margin:0 auto;display:grid;gap:12px;">
+    <a href="{{ main_sofa.url }}" style="display:block;aspect-ratio:4/3;overflow:hidden;background:#f3f3f3;">
+      {% if main_sofa.featured_image != blank %}
+        <img
+          src="{{ main_sofa.featured_image | image_url: width: 900 }}"
+          alt="{{ main_sofa.title | escape }}"
+          loading="lazy"
+          width="900"
+          height="675"
+          style="width:100%;height:100%;object-fit:cover;display:block;"
+        >
       {% endif %}
     </a>
 
-    <div class="cl-sofa__info">
-      <h3 class="cl-sofa__title">
-        <a href="{{ main_sofa.url }}">{{ main_sofa.title | escape }}</a>
+    <div style="display:grid;gap:6px;">
+      <h3 style="margin:0;font-size:1.1rem;font-weight:600;line-height:1.3;">
+        <a href="{{ main_sofa.url }}" style="color:inherit;text-decoration:none;">{{ main_sofa.title | escape }}</a>
       </h3>
 
-      <div class="cl-sofa__price">
+      <div style="display:flex;gap:8px;align-items:baseline;">
         {% if main_sofa.compare_at_price > main_sofa.price %}
-          <s>{{ main_sofa.compare_at_price | money }}</s>
+          <s style="opacity:0.65;">{{ main_sofa.compare_at_price | money }}</s>
         {% endif %}
         <span>{{ main_sofa.price | money }}</span>
       </div>
 
       {% if color_count > 0 %}
-        <ul class="cl-sofa__dots" role="list" aria-label="Tillgängliga färger">
+        <ul role="list" style="display:flex;flex-wrap:wrap;gap:8px;list-style:none;margin:6px 0 0;padding:0;">
           {% for color_product in sofa_collection.products %}
             {% if color_product.tags contains sofa_group_tag %}
               {% assign color_name = '' %}
-              {% assign dot_style = '' %}
               {% assign prefix_down = color_tag_prefix | downcase %}
 
               {% for tag in color_product.tags %}
                 {% assign tag_down = tag | downcase %}
                 {% if tag_down contains prefix_down %}
-                  {% assign color_name = tag | split: ':' | last | strip %}
+                  {% assign color_parts = tag | split: ':' %}
+                  {% assign color_name = color_parts | last | strip %}
                 {% endif %}
               {% endfor %}
 
               {% if color_name == blank %}
-                {% assign color_name = color_product.title | split: '-' | last | strip %}
+                {% assign title_parts = color_product.title | split: '-' %}
+                {% assign color_name = title_parts | last | strip %}
               {% endif %}
 
-              {% if color_product.featured_image %}
-                {% assign thumb = color_product.featured_image | image_url: width: 64 %}
-                {% assign dot_style = 'background-image:url(' | append: thumb | append: ');' %}
-              {% else %}
-                {% assign css_color = color_name | handleize | replace: '-', '' %}
-                {% assign dot_style = 'background-color:' | append: css_color | append: ';' %}
+              {% assign ring = '' %}
+              {% if color_product.id == main_sofa.id %}
+                {% assign ring = 'box-shadow:0 0 0 2px #111;' %}
               {% endif %}
+              {% unless color_product.available %}
+                {% assign ring = ring | append: 'opacity:0.35;' %}
+              {% endunless %}
 
               <li>
-                <a
-                  class="cl-sofa__dot{% if color_product.id == main_sofa.id %} is-active{% endif %}{% unless color_product.available %} is-unavailable{% endunless %}"
-                  href="{{ color_product.url }}"
-                  style="{{ dot_style }}"
-                  title="{{ color_name | escape }}"
-                  aria-label="{{ color_name | escape }}"
-                ></a>
+                {% if color_product.featured_image != blank %}
+                  <a
+                    href="{{ color_product.url }}"
+                    title="{{ color_name | escape }}"
+                    aria-label="{{ color_name | escape }}"
+                    style="width:16px;height:16px;border-radius:50%;display:inline-block;background-size:cover;background-position:center;border:1px solid #ccc;box-sizing:border-box;background-image:url({{ color_product.featured_image | image_url: width: 64 }});{{ ring }}"
+                  ><span style="display:none;">{{ color_name | escape }}</span></a>
+                {% else %}
+                  {% assign css_color = color_name | handleize | replace: '-', '' %}
+                  <a
+                    href="{{ color_product.url }}"
+                    title="{{ color_name | escape }}"
+                    aria-label="{{ color_name | escape }}"
+                    style="width:16px;height:16px;border-radius:50%;display:inline-block;border:1px solid #ccc;box-sizing:border-box;background-color:{{ css_color }};{{ ring }}"
+                  ><span style="display:none;">{{ color_name | escape }}</span></a>
+                {% endif %}
               </li>
             {% endif %}
           {% endfor %}
@@ -115,68 +109,6 @@
       {% endif %}
     </div>
   </div>
-
-  <style>
-    .cl-sofa {
-      max-width: 420px;
-      margin: 0 auto;
-      display: grid;
-      gap: 12px;
-    }
-    .cl-sofa__media {
-      display: block;
-      aspect-ratio: 4 / 3;
-      overflow: hidden;
-      background: #f3f3f3;
-    }
-    .cl-sofa__image {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      display: block;
-    }
-    .cl-sofa__info {
-      display: grid;
-      gap: 6px;
-    }
-    .cl-sofa__title {
-      margin: 0;
-      font-size: 1.1rem;
-      font-weight: 600;
-      line-height: 1.3;
-    }
-    .cl-sofa__title a {
-      color: inherit;
-      text-decoration: none;
-    }
-    .cl-sofa__price {
-      display: flex;
-      gap: 8px;
-      align-items: baseline;
-    }
-    .cl-sofa__price s { opacity: 0.65; }
-    .cl-sofa__dots {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      list-style: none;
-      margin: 6px 0 0;
-      padding: 0;
-    }
-    .cl-sofa__dot {
-      width: 16px;
-      height: 16px;
-      border-radius: 50%;
-      display: inline-block;
-      background-size: cover;
-      background-position: center;
-      border: 1px solid rgba(0,0,0,.18);
-      box-sizing: border-box;
-    }
-    .cl-sofa__dot.is-active { box-shadow: 0 0 0 2px #111; }
-    .cl-sofa__dot.is-unavailable { opacity: 0.35; }
-    .cl-sofa__dot:hover { transform: scale(1.12); }
-  </style>
 {% else %}
-  <p>Ingen soffa hittades. Kontrollera taggen <strong>{{ sofa_group_tag }}</strong> och collection-handtaget <strong>{{ collection_handle }}</strong> (fallback: <strong>{{ fallback_collection_handle }}</strong>).</p>
+  <p>Ingen soffa hittades. Kontrollera taggen soffa-grupp och collections soffgrupp / alla-soffor.</p>
 {% endif %}
