@@ -1,21 +1,26 @@
 {% comment %}
   Farg-/tygprickar via TAGGAAR (inga metafalt kravs).
 
+  VIKTIGT – arkiverade / utkast-produkter syns ALDRIG har.
+  Shopify Liquid kan inte lasa archived/draft pa storefront.
+  Fargprodukterna maste vara AKTIVA (Active), men dolda i rutnatet
+  med taggen dolj-i-rutnat (+ grid-patch med {% continue %}).
+
   HUVUDPRODUKT (syns i rutnatet), t.ex. KRAMEN:
     soffa-grupp
     soffa-huvud
-    farg-total:12          (valfritt – totalt antal farger for +N.
-                            Om saknas raknas antalet produkter med soffa-grupp)
+    farg-total:12          (valfritt – totalt antal farger for +N)
 
-  VARJE FARG-/TYGPRODUKT (egen produkt, dold i rutnatet):
+  VARJE FARG-/TYGPRODUKT (egen produkt, Active, dold i rutnatet):
     soffa-grupp
     dolj-i-rutnat
     farg:Beige             (eller farg:Bla, farg:Sammet gra, ...)
 
-  Bilden i pricken = produktens huvudbild (featured image).
-  Valj alltsa prickbilden genom att satta ratt huvudbild pa varje fargprodukt.
+  Alla (huvud + farger) maste ligga i collection "soffgrupp"
+  (annars fallback till "alla-soffor").
 
-  Visning: max 4 prickar, sedan +N (t.ex. +8 om total ar 12).
+  Bilden i pricken = produktens huvudbild (featured image).
+  Visning: max 4 prickar, sedan +N nar 4 ar fyllda.
 {% endcomment %}
 
 {% if product != blank and product.tags contains 'soffa-grupp' %}
