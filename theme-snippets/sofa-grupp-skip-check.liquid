@@ -1,16 +1,17 @@
 {% comment %}
-  Dolj sekundara farger + pinna huvudsoffan forst.
+  ENBART TAGGAAR – inga metafalt.
 
-  HUVUDPRODUKT (KRAMEN) – taggar:
+  HUVUD (syns forst, utmarkt):
     soffa-grupp
     soffa-huvud
+    farg-total:12          (valfritt)
 
-  OVRIGA farg-/tygprodukter som INTE ska synas som egna kort:
+  OVRIGA FARGOR (egna produkter, dolda som kort):
+    soffa-grupp
     dolj-i-rutnat
+    farg:Beige
 
-  Klistra in i for-loopen FORE <li class="grid__item"> i:
-  - sections/main-collection-product-grid.liquid
-  - sections/featured-collection.liquid
+  Prickbild = respektive produkts huvudbild.
 {% endcomment %}
 
 {% if product.tags contains 'dolj-i-rutnat' %}
