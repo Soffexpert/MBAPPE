@@ -121,15 +121,20 @@
       {% endfor %}
     {% endif %}
 
+    {% comment %}
+      +N = farg-total minus antal synliga prickar.
+      Ex: farg-total:12 och 3 prickar → +9
+      Visa alltid nar total > shown (kravde tidigare 4 fyllda prickar).
+    {% endcomment %}
     {% if total_colors < 1 %}
       {% assign total_colors = shown %}
     {% endif %}
-    {% assign extra_count = total_colors | minus: max_dots %}
+    {% assign extra_count = total_colors | minus: shown %}
     {% if extra_count < 0 %}
       {% assign extra_count = 0 %}
     {% endif %}
 
-    {% if shown >= max_dots and extra_count > 0 %}
+    {% if shown > 0 and extra_count > 0 %}
       <li>
         <a class="sofa-grupp-dots__more" href="{{ product.url }}" aria-label="{{ extra_count }} fler färger">+{{ extra_count }}</a>
       </li>
