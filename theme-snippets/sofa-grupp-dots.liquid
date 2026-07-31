@@ -1,31 +1,44 @@
 {% comment %}
-  Farg-/tygprickar via TAGGAAR (inga metafalt kravs).
+  Farg-/tygprickar – bilder fran Shopify Innehall > Filer.
 
-  VIKTIGT – arkiverade / utkast-produkter syns ALDRIG har.
-  Shopify Liquid kan inte lasa archived/draft pa storefront.
-  Fargprodukterna maste vara AKTIVA (Active), men dolda i rutnatet
-  med taggen dolj-i-rutnat (+ grid-patch med {% continue %}).
+  ============================================================
+  ENKLASTE (rekommenderas): klistra in fillankar pa HUVUDPRODUKTEN
+  ============================================================
+  1. Shopify Admin → Innehåll → Filer → Ladda upp tygbilder
+  2. Kopiera lank till varje fil (cdn.shopify.com/...)
+  3. Pa KRAMEN (huvudprodukten), lagg taggar:
 
-  HUVUDPRODUKT (syns i rutnatet), t.ex. KRAMEN:
-    soffa-grupp
-    soffa-huvud
-    farg-total:12          (valfritt – totalt antal farger for +N)
+       soffa-grupp
+       soffa-huvud
+       farg-total:12
 
-  VARJE FARG-/TYGPRODUKT (egen produkt, Active, dold i rutnatet):
+       prick-bild:https://cdn.shopify.com/s/files/.../beige.png
+       prick-bild:https://cdn.shopify.com/s/files/.../bla.png|Blå
+       prick-bild:https://cdn.shopify.com/s/files/.../gra.png|Grå
+       prick-bild:https://cdn.shopify.com/s/files/.../gron.png|Grön
+
+     Format:  prick-bild:URL
+     eller:   prick-bild:URL|Färgnamn
+
+  Max 4 prickar visas, sedan +N fran farg-total.
+
+  ============================================================
+  ALTERNATIV: Active fargprodukter (om du vill lanka till egna sidor)
+  ============================================================
+  Taggar pa varje fargprodukt:
     soffa-grupp
     dolj-i-rutnat
-    farg:Beige             (eller farg:Bla, farg:Sammet gra, ...)
+    farg:Beige
+    prick-bild:https://cdn.shopify.com/.../beige.png   (valfritt; annars huvudbild)
 
-  Alla (huvud + farger) maste ligga i collection "soffgrupp"
-  (annars fallback till "alla-soffor").
-
-  Bilden i pricken = produktens huvudbild (featured image).
-  Visning: max 4 prickar, sedan +N nar 4 ar fyllda.
+  Maste ligga i collection soffgrupp (eller alla-soffor).
+  Arkiverade produkter syns ALDRIG.
 {% endcomment %}
 
 {% if product != blank and product.tags contains 'soffa-grupp' %}
   {% assign max_dots = 4 %}
   {% assign total_colors = 0 %}
+  {% assign file_dot_count = 0 %}
 
   {% for tag in product.tags %}
     {% assign tag_down = tag | downcase %}
@@ -33,140 +46,161 @@
       {% assign total_parts = tag | split: ':' %}
       {% assign total_colors = total_parts | last | strip | plus: 0 %}
     {% endif %}
+    {% if tag_down contains 'prick-bild:' %}
+      {% assign file_dot_count = file_dot_count | plus: 1 %}
+    {% endif %}
   {% endfor %}
 
-  {% assign group_source = collections.soffgrupp %}
-  {% if group_source == blank or group_source.products.size == 0 %}
-    {% assign group_source = collections['alla-soffor'] %}
-  {% endif %}
-
-  {% assign sibling_count = 0 %}
-  {% if group_source != blank %}
-    {% for sibling in group_source.products %}
-      {% if sibling.tags contains 'soffa-grupp' %}
-        {% assign sibling_count = sibling_count | plus: 1 %}
-      {% endif %}
-    {% endfor %}
-  {% endif %}
-
-  {% if total_colors < 1 %}
-    {% assign total_colors = sibling_count %}
-  {% endif %}
-
-  {% comment %}
-    +N visas bara nar vi faktiskt fyllt 4 prickar.
-    Annars (t.ex. bara 1 taggad farg) blir det bara 1 cirkel utan missvisande +8.
-  {% endcomment %}
-  {% assign extra_count = total_colors | minus: max_dots %}
-  {% if extra_count < 0 %}
-    {% assign extra_count = 0 %}
+  {% assign extra_count = 0 %}
+  {% if total_colors > max_dots %}
+    {% assign extra_count = total_colors | minus: max_dots %}
   {% endif %}
 
   {% assign shown = 0 %}
+  {% assign dots_style_printed = false %}
 
-  {% if sibling_count > 0 %}
-    <ul
-      class="sofa-grupp-dots"
-      role="list"
-      aria-label="Tillgängliga färger och tyger"
-    >
-      {% comment %} 1) Visa huvudprodukten forst {% endcomment %}
-      {% for sibling in group_source.products %}
-        {% if sibling.id == product.id and sibling.tags contains 'soffa-grupp' and shown < max_dots %}
-          {% assign shown = shown | plus: 1 %}
-          {% assign color_name = '' %}
-          {% for tag in sibling.tags %}
-            {% assign tag_down = tag | downcase %}
-            {% if tag_down contains 'farg:' %}
-              {% assign color_parts = tag | split: ':' %}
-              {% assign color_name = color_parts | last | strip %}
+  {% if file_dot_count > 0 %}
+    {% comment %} === Lagge 1: bildlankar pa huvudprodukten === {% endcomment %}
+    <ul class="sofa-grupp-dots" role="list" aria-label="Tillgängliga färger och tyger">
+      {% for tag in product.tags %}
+        {% assign tag_down = tag | downcase %}
+        {% if tag_down contains 'prick-bild:' and shown < max_dots %}
+          {% assign colon_parts = tag | split: ':' %}
+          {% assign prefix_ok = colon_parts | first | downcase %}
+          {% if prefix_ok == 'prick-bild' %}
+            {% assign rebuilt = '' %}
+            {% for p in colon_parts %}
+              {% if forloop.index0 >= 1 %}
+                {% if rebuilt == blank %}
+                  {% assign rebuilt = p %}
+                {% else %}
+                  {% assign rebuilt = rebuilt | append: ':' | append: p %}
+                {% endif %}
+              {% endif %}
+            {% endfor %}
+            {% assign payload_parts = rebuilt | split: '|' %}
+            {% assign prick_url = payload_parts | first | strip %}
+            {% assign prick_name = '' %}
+            {% if payload_parts.size > 1 %}
+              {% assign prick_name = payload_parts[1] | strip %}
             {% endif %}
-          {% endfor %}
-          {% if color_name == blank %}
-            {% assign title_parts = sibling.title | split: '-' %}
-            {% assign color_name = title_parts | last | strip %}
+
+            {% if prick_url != blank %}
+              {% assign shown = shown | plus: 1 %}
+              {% if prick_name == blank %}
+                {% assign prick_name = 'Färg ' | append: shown %}
+              {% endif %}
+              <li>
+                <a
+                  class="sofa-grupp-dots__dot{% if shown == 1 %} is-active{% endif %}"
+                  href="{{ product.url }}"
+                  title="{{ prick_name | escape }}"
+                  aria-label="{{ prick_name | escape }}"
+                  style="background-image: url({{ prick_url }});"
+                >
+                  <span class="visually-hidden">{{ prick_name | escape }}</span>
+                </a>
+              </li>
+            {% endif %}
           {% endif %}
-          <li>
-            {% if sibling.featured_image != blank %}
-              <a
-                class="sofa-grupp-dots__dot is-active"
-                href="{{ sibling.url }}"
-                title="{{ color_name | escape }}"
-                aria-label="{{ color_name | escape }}"
-                style="background-image: url({{ sibling.featured_image | image_url: width: 96 }});"
-              >
-                <span class="visually-hidden">{{ color_name | escape }}</span>
-              </a>
-            {% else %}
-              <a
-                class="sofa-grupp-dots__dot is-active"
-                href="{{ sibling.url }}"
-                title="{{ color_name | escape }}"
-                aria-label="{{ color_name | escape }}"
-                style="background-color: {{ color_name | handleize }};"
-              >
-                <span class="visually-hidden">{{ color_name | escape }}</span>
-              </a>
-            {% endif %}
-          </li>
-        {% endif %}
-      {% endfor %}
-
-      {% comment %} 2) Ovriga farger upp till 4 prickar {% endcomment %}
-      {% for sibling in group_source.products %}
-        {% if sibling.id != product.id and sibling.tags contains 'soffa-grupp' and shown < max_dots %}
-          {% assign shown = shown | plus: 1 %}
-
-          {% assign color_name = '' %}
-          {% for tag in sibling.tags %}
-            {% assign tag_down = tag | downcase %}
-            {% if tag_down contains 'farg:' %}
-              {% assign color_parts = tag | split: ':' %}
-              {% assign color_name = color_parts | last | strip %}
-            {% endif %}
-          {% endfor %}
-          {% if color_name == blank %}
-            {% assign title_parts = sibling.title | split: '-' %}
-            {% assign color_name = title_parts | last | strip %}
-          {% endif %}
-
-          <li>
-            {% if sibling.featured_image != blank %}
-              <a
-                class="sofa-grupp-dots__dot"
-                href="{{ sibling.url }}"
-                title="{{ color_name | escape }}"
-                aria-label="{{ color_name | escape }}"
-                style="background-image: url({{ sibling.featured_image | image_url: width: 96 }});"
-              >
-                <span class="visually-hidden">{{ color_name | escape }}</span>
-              </a>
-            {% else %}
-              <a
-                class="sofa-grupp-dots__dot"
-                href="{{ sibling.url }}"
-                title="{{ color_name | escape }}"
-                aria-label="{{ color_name | escape }}"
-                style="background-color: {{ color_name | handleize }};"
-              >
-                <span class="visually-hidden">{{ color_name | escape }}</span>
-              </a>
-            {% endif %}
-          </li>
         {% endif %}
       {% endfor %}
 
       {% if shown >= max_dots and extra_count > 0 %}
         <li>
-          <a
-            class="sofa-grupp-dots__more"
-            href="{{ product.url }}"
-            aria-label="{{ extra_count }} fler färger"
-          >+{{ extra_count }}</a>
+          <a class="sofa-grupp-dots__more" href="{{ product.url }}" aria-label="{{ extra_count }} fler färger">+{{ extra_count }}</a>
         </li>
       {% endif %}
     </ul>
+    {% assign dots_style_printed = true %}
 
+  {% else %}
+    {% comment %} === Lagge 2: Active syskon-produkter === {% endcomment %}
+    {% assign group_source = collections.soffgrupp %}
+    {% if group_source == blank or group_source.products.size == 0 %}
+      {% assign group_source = collections['alla-soffor'] %}
+    {% endif %}
+
+    {% assign sibling_count = 0 %}
+    {% if group_source != blank %}
+      {% for sibling in group_source.products %}
+        {% if sibling.tags contains 'soffa-grupp' %}
+          {% assign sibling_count = sibling_count | plus: 1 %}
+        {% endif %}
+      {% endfor %}
+    {% endif %}
+
+    {% if total_colors < 1 %}
+      {% assign total_colors = sibling_count %}
+    {% endif %}
+    {% assign extra_count = total_colors | minus: max_dots %}
+    {% if extra_count < 0 %}
+      {% assign extra_count = 0 %}
+    {% endif %}
+
+    {% if sibling_count > 0 %}
+      <ul class="sofa-grupp-dots" role="list" aria-label="Tillgängliga färger och tyger">
+        {% for sibling in group_source.products %}
+          {% if sibling.tags contains 'soffa-grupp' and shown < max_dots %}
+            {% assign shown = shown | plus: 1 %}
+
+            {% assign color_name = '' %}
+            {% assign prick_url = '' %}
+            {% for tag in sibling.tags %}
+              {% assign tag_down = tag | downcase %}
+              {% if tag_down contains 'farg:' %}
+                {% assign color_parts = tag | split: ':' %}
+                {% assign color_name = color_parts | last | strip %}
+              {% endif %}
+              {% if tag_down contains 'prick-bild:' %}
+                {% assign prick_url = tag | split: 'prick-bild:' | last | strip | split: '|' | first | strip %}
+              {% endif %}
+            {% endfor %}
+            {% if color_name == blank %}
+              {% assign title_parts = sibling.title | split: '-' %}
+              {% assign color_name = title_parts | last | strip %}
+            {% endif %}
+            {% if prick_url == blank and sibling.featured_image != blank %}
+              {% assign prick_url = sibling.featured_image | image_url: width: 96 %}
+            {% endif %}
+
+            <li>
+              {% if prick_url != blank %}
+                <a
+                  class="sofa-grupp-dots__dot{% if sibling.id == product.id %} is-active{% endif %}"
+                  href="{{ sibling.url }}"
+                  title="{{ color_name | escape }}"
+                  aria-label="{{ color_name | escape }}"
+                  style="background-image: url({{ prick_url }});"
+                >
+                  <span class="visually-hidden">{{ color_name | escape }}</span>
+                </a>
+              {% else %}
+                <a
+                  class="sofa-grupp-dots__dot{% if sibling.id == product.id %} is-active{% endif %}"
+                  href="{{ sibling.url }}"
+                  title="{{ color_name | escape }}"
+                  aria-label="{{ color_name | escape }}"
+                  style="background-color: {{ color_name | handleize }};"
+                >
+                  <span class="visually-hidden">{{ color_name | escape }}</span>
+                </a>
+              {% endif %}
+            </li>
+          {% endif %}
+        {% endfor %}
+
+        {% if shown >= max_dots and extra_count > 0 %}
+          <li>
+            <a class="sofa-grupp-dots__more" href="{{ product.url }}" aria-label="{{ extra_count }} fler färger">+{{ extra_count }}</a>
+          </li>
+        {% endif %}
+      </ul>
+      {% assign dots_style_printed = true %}
+    {% endif %}
+  {% endif %}
+
+  {% if dots_style_printed %}
     <style>
       .sofa-grupp-dots {
         display: flex;
