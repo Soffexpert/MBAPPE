@@ -48,6 +48,10 @@
     {% assign total_colors = sibling_count %}
   {% endif %}
 
+  {% comment %}
+    +N visas bara nar vi faktiskt fyllt 4 prickar.
+    Annars (t.ex. bara 1 taggad farg) blir det bara 1 cirkel utan missvisande +8.
+  {% endcomment %}
   {% assign extra_count = total_colors | minus: max_dots %}
   {% if extra_count < 0 %}
     {% assign extra_count = 0 %}
@@ -61,8 +65,51 @@
       role="list"
       aria-label="Tillgängliga färger och tyger"
     >
+      {% comment %} 1) Visa huvudprodukten forst {% endcomment %}
       {% for sibling in group_source.products %}
-        {% if sibling.tags contains 'soffa-grupp' and shown < max_dots %}
+        {% if sibling.id == product.id and sibling.tags contains 'soffa-grupp' and shown < max_dots %}
+          {% assign shown = shown | plus: 1 %}
+          {% assign color_name = '' %}
+          {% for tag in sibling.tags %}
+            {% assign tag_down = tag | downcase %}
+            {% if tag_down contains 'farg:' %}
+              {% assign color_parts = tag | split: ':' %}
+              {% assign color_name = color_parts | last | strip %}
+            {% endif %}
+          {% endfor %}
+          {% if color_name == blank %}
+            {% assign title_parts = sibling.title | split: '-' %}
+            {% assign color_name = title_parts | last | strip %}
+          {% endif %}
+          <li>
+            {% if sibling.featured_image != blank %}
+              <a
+                class="sofa-grupp-dots__dot is-active"
+                href="{{ sibling.url }}"
+                title="{{ color_name | escape }}"
+                aria-label="{{ color_name | escape }}"
+                style="background-image: url({{ sibling.featured_image | image_url: width: 96 }});"
+              >
+                <span class="visually-hidden">{{ color_name | escape }}</span>
+              </a>
+            {% else %}
+              <a
+                class="sofa-grupp-dots__dot is-active"
+                href="{{ sibling.url }}"
+                title="{{ color_name | escape }}"
+                aria-label="{{ color_name | escape }}"
+                style="background-color: {{ color_name | handleize }};"
+              >
+                <span class="visually-hidden">{{ color_name | escape }}</span>
+              </a>
+            {% endif %}
+          </li>
+        {% endif %}
+      {% endfor %}
+
+      {% comment %} 2) Ovriga farger upp till 4 prickar {% endcomment %}
+      {% for sibling in group_source.products %}
+        {% if sibling.id != product.id and sibling.tags contains 'soffa-grupp' and shown < max_dots %}
           {% assign shown = shown | plus: 1 %}
 
           {% assign color_name = '' %}
@@ -81,7 +128,7 @@
           <li>
             {% if sibling.featured_image != blank %}
               <a
-                class="sofa-grupp-dots__dot{% if sibling.id == product.id %} is-active{% endif %}"
+                class="sofa-grupp-dots__dot"
                 href="{{ sibling.url }}"
                 title="{{ color_name | escape }}"
                 aria-label="{{ color_name | escape }}"
@@ -90,13 +137,12 @@
                 <span class="visually-hidden">{{ color_name | escape }}</span>
               </a>
             {% else %}
-              {% assign css_color = color_name | handleize | replace: '-', '' %}
               <a
-                class="sofa-grupp-dots__dot{% if sibling.id == product.id %} is-active{% endif %}"
+                class="sofa-grupp-dots__dot"
                 href="{{ sibling.url }}"
                 title="{{ color_name | escape }}"
                 aria-label="{{ color_name | escape }}"
-                style="background-color: {{ css_color }};"
+                style="background-color: {{ color_name | handleize }};"
               >
                 <span class="visually-hidden">{{ color_name | escape }}</span>
               </a>
@@ -105,7 +151,7 @@
         {% endif %}
       {% endfor %}
 
-      {% if extra_count > 0 %}
+      {% if shown >= max_dots and extra_count > 0 %}
         <li>
           <a
             class="sofa-grupp-dots__more"
