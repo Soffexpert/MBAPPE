@@ -35,9 +35,36 @@
     }
   }
 
-  /* KRAMEN / soffa-huvud: always first in the product grid */
+  /* KRAMEN / soffa-huvud: first + stands out from other cards */
   #product-grid .grid__item--sofa-first {
     order: -1;
+  }
+
+  #product-grid .grid__item--sofa-first .card-wrapper,
+  #product-grid .grid__item--sofa-first .card {
+    position: relative;
+    z-index: 2;
+    border-radius: var(--product-card-corner-radius, 1.2rem);
+    box-shadow:
+      0 18px 40px rgba(0, 0, 0, 0.18),
+      0 6px 14px rgba(0, 0, 0, 0.10);
+    transform: translateY(-4px);
+    transition: box-shadow 0.25s ease, transform 0.25s ease;
+  }
+
+  #product-grid .grid__item--sofa-first .card-wrapper:hover,
+  #product-grid .grid__item--sofa-first .card:hover {
+    box-shadow:
+      0 24px 48px rgba(0, 0, 0, 0.22),
+      0 8px 18px rgba(0, 0, 0, 0.12);
+    transform: translateY(-6px);
+  }
+
+  #product-grid .grid__item--sofa-first .card__inner,
+  #product-grid .grid__item--sofa-first .card__media,
+  #product-grid .grid__item--sofa-first .media {
+    border-radius: var(--product-card-corner-radius, 1.2rem);
+    overflow: hidden;
   }
 {%- endstyle -%}
 
