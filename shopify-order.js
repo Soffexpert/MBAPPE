@@ -7,6 +7,35 @@ function formatMoney(amount) {
   return Number(amount).toFixed(2);
 }
 
+/**
+ * Shopify requires E.164 (+4676...). Apple Pay / Stripe often send
+ * "00 46 76 113 99 02" which Shopify rejects with {"phone":["is invalid"]}
+ * and the whole order create fails — omit phone rather than lose the order.
+ */
+export function normalizePhone(phone, countryCode = 'SE') {
+  if (phone == null) return undefined;
+  let raw = String(phone).trim();
+  if (!raw) return undefined;
+
+  let digits = raw.replace(/[^\d+]/g, '');
+  if (digits.startsWith('00')) digits = `+${digits.slice(2)}`;
+  if (!digits.startsWith('+') && /^46\d{8,}$/.test(digits)) digits = `+${digits}`;
+
+  const cc = String(countryCode || 'SE').toUpperCase();
+  if (!digits.startsWith('+') && cc === 'SE' && /^0\d{8,10}$/.test(digits)) {
+    digits = `+46${digits.slice(1)}`;
+  }
+  if (!digits.startsWith('+') && cc === 'DK' && /^0\d{8}$/.test(digits)) {
+    digits = `+45${digits.slice(1)}`;
+  }
+
+  if (!/^\+[1-9]\d{6,14}$/.test(digits)) {
+    console.warn('Dropping invalid phone for Shopify:', phone);
+    return undefined;
+  }
+  return digits;
+}
+
 function getOrderNote(session) {
   const noteField = session.custom_fields?.find((field) => field.key === 'order_note');
   return noteField?.text?.value || '';
@@ -21,16 +50,19 @@ function getAddress(session) {
 
   if (!address) return null;
 
-  return {
+  const country = address.country || 'SE';
+  const phone = normalizePhone(session.customer_details?.phone, country);
+  const result = {
     first_name: parts[0] || '',
     last_name: parts.slice(1).join(' ') || '',
     address1: address.line1 || '',
     address2: address.line2 || '',
     city: address.city || '',
     zip: address.postal_code || '',
-    country_code: address.country || 'SE',
-    phone: session.customer_details?.phone || '',
+    country_code: country,
   };
+  if (phone) result.phone = phone;
+  return result;
 }
 
 function getShippingLabel(session) {
@@ -303,6 +335,18 @@ async function findExistingOrderByStripeSession(adminStore, token, sessionId) {
   }
 }
 
+function stripPhoneFields(orderPayload) {
+  delete orderPayload.order.phone;
+  if (orderPayload.order.customer) delete orderPayload.order.customer.phone;
+  if (orderPayload.order.shipping_address) delete orderPayload.order.shipping_address.phone;
+  if (orderPayload.order.billing_address) delete orderPayload.order.billing_address.phone;
+}
+
+function isPhoneInvalidError(data) {
+  const raw = JSON.stringify(data?.errors || data || {});
+  return /phone/i.test(raw) && /invalid/i.test(raw);
+}
+
 async function createOrderViaRest(adminStore, token, session, orderLineItems) {
   const shippingAddress = getAddress(session);
   const orderNote = getOrderNote(session);
@@ -310,12 +354,15 @@ async function createOrderViaRest(adminStore, token, session, orderLineItems) {
   const discountTotal = (session.total_details?.amount_discount || 0) / 100;
   const shippingLabel = getShippingLabel(session);
   const customerEmail = session.customer_details?.email;
+  const phone = normalizePhone(
+    session.customer_details?.phone,
+    shippingAddress?.country_code || session.customer_details?.address?.country || 'SE'
+  );
 
   // Do NOT send currency — many shops reject it and the whole create fails.
   const orderPayload = {
     order: {
       email: customerEmail,
-      phone: session.customer_details?.phone || undefined,
       financial_status: 'paid',
       send_receipt: false,
       note: [
@@ -350,6 +397,8 @@ async function createOrderViaRest(adminStore, token, session, orderLineItems) {
     },
   };
 
+  if (phone) orderPayload.order.phone = phone;
+
   if (customerEmail) {
     orderPayload.order.customer = {
       email: customerEmail,
@@ -359,19 +408,29 @@ async function createOrderViaRest(adminStore, token, session, orderLineItems) {
         shippingAddress?.last_name ||
         session.customer_details?.name?.split(/\s+/).slice(1).join(' ') ||
         '',
-      phone: session.customer_details?.phone || undefined,
     };
+    if (phone) orderPayload.order.customer.phone = phone;
   }
 
   if (shippingAddress) {
     orderPayload.order.shipping_address = shippingAddress;
-    orderPayload.order.billing_address = shippingAddress;
+    orderPayload.order.billing_address = { ...shippingAddress };
   }
 
   let { response, data } = await adminFetch(adminStore, token, '/orders.json', {
     method: 'POST',
     body: orderPayload,
   });
+
+  // Retry without phone if Shopify rejects the number (never lose a paid order)
+  if (!response.ok && isPhoneInvalidError(data)) {
+    console.error('Shopify rejected phone, retrying without phone:', JSON.stringify(data));
+    stripPhoneFields(orderPayload);
+    ({ response, data } = await adminFetch(adminStore, token, '/orders.json', {
+      method: 'POST',
+      body: orderPayload,
+    }));
+  }
 
   // Retry with custom line items (title) if variant_id rejected
   if (!response.ok) {
@@ -383,6 +442,7 @@ async function createOrderViaRest(adminStore, token, session, orderLineItems) {
       requires_shipping: true,
     }));
     orderPayload.order.line_items = customItems;
+    stripPhoneFields(orderPayload);
     ({ response, data } = await adminFetch(adminStore, token, '/orders.json', {
       method: 'POST',
       body: orderPayload,
@@ -390,7 +450,7 @@ async function createOrderViaRest(adminStore, token, session, orderLineItems) {
   }
 
   if (!response.ok) {
-    console.error('Shopify order create failed (attempt 2):', JSON.stringify(data));
+    console.error('Shopify order create failed (final):', JSON.stringify(data));
     throw new Error(
       data.errors ? JSON.stringify(data.errors) : 'Kunde inte skapa Shopify-order.'
     );
