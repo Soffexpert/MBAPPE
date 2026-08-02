@@ -1,0 +1,19 @@
+{% comment %}
+  ENBART TAGGAAR – inga metafalt.
+
+  HUVUD (syns forst, utmarkt):
+    soffa-grupp
+    soffa-huvud
+    farg-total:12          (valfritt)
+
+  OVRIGA FARGOR (egna produkter, dolda som kort):
+    soffa-grupp
+    dolj-i-rutnat
+    farg:Beige
+
+  Prickbild = respektive produkts huvudbild.
+{% endcomment %}
+
+{% if product.tags contains 'dolj-i-rutnat' %}
+  {% continue %}
+{% endif %}

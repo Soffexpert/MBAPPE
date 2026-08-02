@@ -1,0 +1,23 @@
+{% comment %}
+  TA BORT DENNA "Anpassad liquid"-SEKTION.
+
+  Soffkortet ska inte langre ligga som egen sektion utanfor
+  produktnatet. Integrationen sker i temats produktkort:
+
+  1. Skapa snippets/sofa-grupp-dots.liquid
+     (innehall: theme-snippets/sofa-grupp-dots.liquid)
+
+  2. I snippets/card-product.liquid, efter price-raden:
+     {% render 'sofa-grupp-dots', product: card_product %}
+
+  3. I sections/main-collection-product-grid.liquid
+     (och featured-collection.liquid), inuti for-loopen
+     fore <li class="grid__item">:
+     klistra in koden fran sofa-grupp-skip-check.liquid
+
+  4. Ta bort denna Anpassad liquid-sektion fran sidan.
+{% endcomment %}
+<p style="margin:0;padding:12px;border:1px dashed #ccc;font-size:14px;line-height:1.4;">
+  Soffa-grupp ar flyttad till produktnatet. Ta bort den har Anpassad liquid-sektionen
+  och folj installationen i <code>theme-snippets/sofa-grupp-dots.liquid</code>.
+</p>

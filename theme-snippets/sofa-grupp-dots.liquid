@@ -1,0 +1,190 @@
+{% comment %}
+  Fargprickar – ENDAST bilder fran taggen prick-bild: (Innehall → Filer).
+  Produkten med soffa-huvud (KRAMEN) visas ALDRIG som prick.
+{% endcomment %}
+
+{% if product != blank and product.tags contains 'soffa-grupp' %}
+  {% assign max_dots = 4 %}
+  {% assign total_colors = 0 %}
+  {% assign shown = 0 %}
+  {% assign dots_style_printed = false %}
+
+  {% for tag in product.tags %}
+    {% assign tag_down = tag | downcase %}
+    {% if tag_down contains 'farg-total:' %}
+      {% assign total_colors = tag | split: ':' | last | strip | plus: 0 %}
+    {% endif %}
+  {% endfor %}
+
+  {% assign group_source = collections.soffgrupp %}
+  {% if group_source == blank or group_source.products.size == 0 %}
+    {% assign group_source = collections['alla-soffor'] %}
+  {% endif %}
+
+  {% comment %} Samla prickar: 1) prick-bild pa detta kort 2) Active fargprodukter med prick-bild {% endcomment %}
+  <ul class="sofa-grupp-dots" role="list" aria-label="Tillgängliga färger och tyger">
+    {% comment %} --- A) Fillankar direkt pa huvudkortet --- {% endcomment %}
+    {% for tag in product.tags %}
+      {% if shown >= max_dots %}{% break %}{% endif %}
+      {% assign colon_parts = tag | split: ':' %}
+      {% assign prefix_ok = colon_parts | first | downcase %}
+      {% if prefix_ok == 'prick-bild' %}
+        {% assign rebuilt = '' %}
+        {% for p in colon_parts %}
+          {% if forloop.index0 >= 1 %}
+            {% if rebuilt == blank %}
+              {% assign rebuilt = p %}
+            {% else %}
+              {% assign rebuilt = rebuilt | append: ':' | append: p %}
+            {% endif %}
+          {% endif %}
+        {% endfor %}
+        {% assign payload_parts = rebuilt | split: '|' %}
+        {% assign prick_url = payload_parts | first | strip %}
+        {% assign prick_name = '' %}
+        {% if payload_parts.size > 1 %}
+          {% assign prick_name = payload_parts[1] | strip %}
+        {% endif %}
+        {% if prick_url != blank %}
+          {% assign shown = shown | plus: 1 %}
+          {% if prick_name == blank %}
+            {% assign prick_name = 'Färg ' | append: shown %}
+          {% endif %}
+          <li>
+            <a
+              class="sofa-grupp-dots__dot{% if shown == 1 %} is-active{% endif %}"
+              href="{{ product.url }}"
+              title="{{ prick_name | escape }}"
+              aria-label="{{ prick_name | escape }}"
+              style="background-image: url({{ prick_url }});"
+            >
+              <span class="visually-hidden">{{ prick_name | escape }}</span>
+            </a>
+          </li>
+        {% endif %}
+      {% endif %}
+    {% endfor %}
+
+    {% comment %} --- B) Syskon med dolj-i-rutnat + prick-bild (hoppa over huvudd) --- {% endcomment %}
+    {% if shown < max_dots and group_source != blank %}
+      {% for sibling in group_source.products %}
+        {% if shown >= max_dots %}{% break %}{% endif %}
+
+        {% if sibling.id == product.id %}{% continue %}{% endif %}
+        {% if sibling.tags contains 'soffa-huvud' %}{% continue %}{% endif %}
+        {% unless sibling.tags contains 'soffa-grupp' %}{% continue %}{% endunless %}
+        {% unless sibling.tags contains 'dolj-i-rutnat' %}{% continue %}{% endunless %}
+
+        {% assign color_name = '' %}
+        {% assign prick_url = '' %}
+        {% for tag in sibling.tags %}
+          {% assign tag_down = tag | downcase %}
+          {% if tag_down contains 'farg:' %}
+            {% assign color_name = tag | split: ':' | last | strip %}
+          {% endif %}
+          {% assign colon_parts = tag | split: ':' %}
+          {% assign prefix_ok = colon_parts | first | downcase %}
+          {% if prefix_ok == 'prick-bild' %}
+            {% assign rebuilt = '' %}
+            {% for p in colon_parts %}
+              {% if forloop.index0 >= 1 %}
+                {% if rebuilt == blank %}
+                  {% assign rebuilt = p %}
+                {% else %}
+                  {% assign rebuilt = rebuilt | append: ':' | append: p %}
+                {% endif %}
+              {% endif %}
+            {% endfor %}
+            {% assign prick_url = rebuilt | split: '|' | first | strip %}
+          {% endif %}
+        {% endfor %}
+
+        {% comment %} Ingen fallback till featured_image – da blir det soffbild {% endcomment %}
+        {% if prick_url == blank %}{% continue %}{% endif %}
+
+        {% if color_name == blank %}
+          {% assign color_name = sibling.title | split: '-' | last | strip %}
+        {% endif %}
+
+        {% assign shown = shown | plus: 1 %}
+        <li>
+          <a
+            class="sofa-grupp-dots__dot"
+            href="{{ sibling.url }}"
+            title="{{ color_name | escape }}"
+            aria-label="{{ color_name | escape }}"
+            style="background-image: url({{ prick_url }});"
+          >
+            <span class="visually-hidden">{{ color_name | escape }}</span>
+          </a>
+        </li>
+      {% endfor %}
+    {% endif %}
+
+    {% comment %}
+      +N = farg-total minus antal synliga prickar.
+      Ex: farg-total:12 och 3 prickar → +9
+      Visa alltid nar total > shown (kravde tidigare 4 fyllda prickar).
+    {% endcomment %}
+    {% if total_colors < 1 %}
+      {% assign total_colors = shown %}
+    {% endif %}
+    {% assign extra_count = total_colors | minus: shown %}
+    {% if extra_count < 0 %}
+      {% assign extra_count = 0 %}
+    {% endif %}
+
+    {% if shown > 0 and extra_count > 0 %}
+      <li>
+        <a class="sofa-grupp-dots__more" href="{{ product.url }}" aria-label="{{ extra_count }} fler färger">+{{ extra_count }}</a>
+      </li>
+    {% endif %}
+  </ul>
+
+  {% if shown > 0 %}
+    <style>
+      .sofa-grupp-dots {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+        list-style: none;
+        margin: 10px 0 0;
+        padding: 0;
+      }
+      .sofa-grupp-dots__dot {
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+        display: inline-block;
+        background-size: cover;
+        background-position: center;
+        border: 1px solid rgba(0, 0, 0, 0.18);
+        box-sizing: border-box;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+      }
+      .sofa-grupp-dots__dot.is-active {
+        box-shadow: 0 0 0 2px #111;
+      }
+      .sofa-grupp-dots__more {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 28px;
+        height: 22px;
+        padding: 0 6px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 600;
+        line-height: 1;
+        color: #111;
+        text-decoration: none;
+        background: #f2f2f2;
+        border: 1px solid rgba(0, 0, 0, 0.12);
+      }
+      .sofa-grupp-dots__more:hover {
+        background: #e8e8e8;
+      }
+    </style>
+  {% endif %}
+{% endif %}
