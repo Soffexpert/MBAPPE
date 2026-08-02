@@ -447,6 +447,93 @@ async function handleDebugOrder(req, res) {
   }
 }
 
+/** List recent Stripe checkouts + whether Shopify order was created (diagnosis). */
+async function handleDebugRecentCheckouts(req, res) {
+  try {
+    const stripeKey = process.env.STRIPE_SECRET_KEY;
+    if (!stripeKey) {
+      sendJson(res, 500, { error: 'STRIPE_SECRET_KEY saknas.' });
+      return;
+    }
+
+    const stripe = new Stripe(stripeKey);
+    const url = new URL(req.url, `http://${req.headers.host}`);
+    const hours = Math.min(Number(url.searchParams.get('hours') || 48) || 48, 168);
+    const limit = Math.min(Number(url.searchParams.get('limit') || 30) || 30, 50);
+    const createdAfter = Math.floor(Date.now() / 1000) - hours * 3600;
+
+    const sessions = await stripe.checkout.sessions.list({
+      limit,
+      created: { gte: createdAfter },
+    });
+
+    const rows = [];
+    for (const session of sessions.data) {
+      let paymentMethod = null;
+      try {
+        if (session.payment_intent) {
+          const piId =
+            typeof session.payment_intent === 'string'
+              ? session.payment_intent
+              : session.payment_intent.id;
+          const pi = await stripe.paymentIntents.retrieve(piId, {
+            expand: ['payment_method', 'latest_charge'],
+          });
+          const charge =
+            typeof pi.latest_charge === 'object' ? pi.latest_charge : null;
+          paymentMethod =
+            charge?.payment_method_details?.type ||
+            (typeof pi.payment_method === 'object' ? pi.payment_method?.type : null) ||
+            pi.payment_method_types?.[0] ||
+            null;
+        }
+      } catch (error) {
+        paymentMethod = `lookup_failed:${error.message}`;
+      }
+
+      const meta = session.metadata || {};
+      rows.push({
+        id: session.id,
+        created: new Date(session.created * 1000).toISOString(),
+        status: session.status,
+        paymentStatus: session.payment_status,
+        amountTotal: session.amount_total,
+        currency: session.currency,
+        email: session.customer_details?.email || session.customer_email || null,
+        paymentMethodTypes: session.payment_method_types || [],
+        paymentMethod,
+        shopifyOrderId: meta.shopify_order_id || null,
+        shopifyOrderName: meta.shopify_order_name || null,
+        shopifyFulfilling: meta.shopify_fulfilling || null,
+        market: meta.market || null,
+        missingShopifyOrder:
+          (session.payment_status === 'paid' ||
+            session.payment_status === 'no_payment_required') &&
+          !meta.shopify_order_id,
+        pendingAsync:
+          session.status === 'complete' &&
+          session.payment_status !== 'paid' &&
+          session.payment_status !== 'no_payment_required',
+      });
+    }
+
+    rows.sort((a, b) => (a.created < b.created ? 1 : -1));
+
+    sendJson(res, 200, {
+      hours,
+      limit,
+      total: rows.length,
+      missingShopifyOrders: rows.filter((r) => r.missingShopifyOrder),
+      pendingAsyncPayments: rows.filter((r) => r.pendingAsync),
+      sessions: rows,
+      hint: 'POST /recover-order {"session_id":"cs_..."} to create Shopify order for a paid session',
+    });
+  } catch (error) {
+    console.error('debug-recent-checkouts:', error);
+    sendJson(res, 500, { error: error.message || 'Debug failed.' });
+  }
+}
+
 function handleConfig(res) {
   const publishableKey = process.env.STRIPE_PUBLISHABLE_KEY || '';
   sendJson(res, 200, { publishableKey });
@@ -494,6 +581,14 @@ const server = http.createServer(async (req, res) => {
     path === '/debug-order'
   ) {
     await handleDebugOrder(req, res);
+    return;
+  }
+
+  if (
+    (req.method === 'GET' || req.method === 'POST') &&
+    path === '/debug-recent-checkouts'
+  ) {
+    await handleDebugRecentCheckouts(req, res);
     return;
   }
 
