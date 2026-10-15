@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="sv">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Soffa 3D</title>
+    <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.5.0/model-viewer.min.js"></script>
+  </head>
+  <body>
+    <div
+      class="sofa-3d"
+      id="Sofa3d-preview"
+      data-sofa-3d
+      data-material-names="tyg, fabric, upholstery, cloth, textile, seat, cushion, textil"
+      data-status-choose-fabric="Välj ett tyg för att se färgerna."
+      data-status-choose-color="Välj en färg."
+      data-status-showing="3D-modellen visar nu __COLOR__ __FABRIC__."
+      data-status-loading="Laddar tyget på 3D-modellen."
+      data-status-missing-model="Ladda upp en 3D-modell på produkten. Den visas till vänster."
+      data-status-image-error="Tygbilden kunde inte läggas på modellen. Valet sparas ändå på beställningen."
+    >
+      <div class="sofa-3d__layout">
+        <div class="sofa-3d__stage" data-sofa-stage>
+          <model-viewer
+            src="sofa.glb"
+            alt="Soffa"
+            camera-controls
+            interaction-policy="allow-when-focused"
+            shadow-intensity="1"
+            camera-orbit="18deg 72deg 4.6m"
+            style="--poster-color: transparent;"
+          ></model-viewer>
+        </div>
+        <div class="sofa-3d__panel">
+          <h1 class="sofa-3d__title">Soffa</h1>
+          <p class="sofa-3d__price"><span>12 900 kr</span></p>
+          <h2 class="sofa-3d__label">Tyg</h2>
+          <div class="sofa-3d__fabrics" role="group" aria-label="Tyg">
+            <button type="button" class="sofa-3d__fabric" data-fabric-button data-fabric="manchester" aria-expanded="false" aria-controls="SofaColors-preview">Manchester</button>
+            <button type="button" class="sofa-3d__fabric" data-fabric-button data-fabric="sammet" aria-expanded="false" aria-controls="SofaColors-preview">Sammet</button>
+          </div>
+          <div class="sofa-3d__colors" id="SofaColors-preview" data-sofa-colors hidden>
+            <div class="sofa-3d__swatches" role="group" aria-label="Välj en färg.">
+              <button type="button" class="sofa-3d__swatch" data-swatch data-fabric="manchester" data-fabric-label="Manchester" data-color="Svart" data-fallback="#2a2a2a" data-model-alt="" data-image="fabrics/manchester-svart.png" aria-pressed="false" aria-label="Svart Manchester" hidden>
+                <span class="sofa-3d__swatch-media"><img class="sofa-3d__swatch-image" alt="" width="160" height="160" src="fabrics/manchester-svart.png"></span>
+                <span class="sofa-3d__swatch-name">Svart</span>
+              </button>
+              <button type="button" class="sofa-3d__swatch" data-swatch data-fabric="manchester" data-fabric-label="Manchester" data-color="Grå" data-fallback="#969698" data-model-alt="" data-image="fabrics/manchester-gra.png" aria-pressed="false" aria-label="Grå Manchester" hidden>
+                <span class="sofa-3d__swatch-media"><img class="sofa-3d__swatch-image" alt="" width="160" height="160" src="fabrics/manchester-gra.png"></span>
+                <span class="sofa-3d__swatch-name">Grå</span>
+              </button>
+              <button type="button" class="sofa-3d__swatch" data-swatch data-fabric="manchester" data-fabric-label="Manchester" data-color="Beige" data-fallback="#ceb89c" data-model-alt="" data-image="fabrics/manchester-beige.png" aria-pressed="false" aria-label="Beige Manchester" hidden>
+                <span class="sofa-3d__swatch-media"><img class="sofa-3d__swatch-image" alt="" width="160" height="160" src="fabrics/manchester-beige.png"></span>
+                <span class="sofa-3d__swatch-name">Beige</span>
+              </button>
+              <button type="button" class="sofa-3d__swatch" data-swatch data-fabric="manchester" data-fabric-label="Manchester" data-color="Blå" data-fallback="#244470" data-model-alt="" data-image="fabrics/manchester-bla.png" aria-pressed="false" aria-label="Blå Manchester" hidden>
+                <span class="sofa-3d__swatch-media"><img class="sofa-3d__swatch-image" alt="" width="160" height="160" src="fabrics/manchester-bla.png"></span>
+                <span class="sofa-3d__swatch-name">Blå</span>
+              </button>
+              <button type="button" class="sofa-3d__swatch" data-swatch data-fabric="sammet" data-fabric-label="Sammet" data-color="Svart" data-fallback="#1c1c1e" data-model-alt="" data-image="fabrics/sammet-svart.png" aria-pressed="false" aria-label="Svart Sammet" hidden>
+                <span class="sofa-3d__swatch-media"><img class="sofa-3d__swatch-image" alt="" width="160" height="160" src="fabrics/sammet-svart.png"></span>
+                <span class="sofa-3d__swatch-name">Svart</span>
+              </button>
+              <button type="button" class="sofa-3d__swatch" data-swatch data-fabric="sammet" data-fabric-label="Sammet" data-color="Grön" data-fallback="#244a3a" data-model-alt="" data-image="fabrics/sammet-gron.png" aria-pressed="false" aria-label="Grön Sammet" hidden>
+                <span class="sofa-3d__swatch-media"><img class="sofa-3d__swatch-image" alt="" width="160" height="160" src="fabrics/sammet-gron.png"></span>
+                <span class="sofa-3d__swatch-name">Grön</span>
+              </button>
+              <button type="button" class="sofa-3d__swatch" data-swatch data-fabric="sammet" data-fabric-label="Sammet" data-color="Beige" data-fallback="#d6c4a8" data-model-alt="" data-image="fabrics/sammet-beige.png" aria-pressed="false" aria-label="Beige Sammet" hidden>
+                <span class="sofa-3d__swatch-media"><img class="sofa-3d__swatch-image" alt="" width="160" height="160" src="fabrics/sammet-beige.png"></span>
+                <span class="sofa-3d__swatch-name">Beige</span>
+              </button>
+              <button type="button" class="sofa-3d__swatch" data-swatch data-fabric="sammet" data-fabric-label="Sammet" data-color="Rost" data-fallback="#96402e" data-model-alt="" data-image="fabrics/sammet-rost.png" aria-pressed="false" aria-label="Rost Sammet" hidden>
+                <span class="sofa-3d__swatch-media"><img class="sofa-3d__swatch-image" alt="" width="160" height="160" src="fabrics/sammet-rost.png"></span>
+                <span class="sofa-3d__swatch-name">Rost</span>
+              </button>
+            </div>
+          </div>
+          <p class="sofa-3d__status" data-sofa-status aria-live="polite">Välj ett tyg för att se färgerna.</p>
+          <form id="SofaForm-preview">
+            <input type="hidden" name="id" value="1">
+            <input type="hidden" name="quantity" value="1">
+            <input type="hidden" name="properties[Tyg]" value="" data-sofa-property="fabric">
+            <input type="hidden" name="properties[Färg]" value="" data-sofa-property="color">
+            <button type="submit" name="add" class="sofa-3d__submit">Lägg i varukorg</button>
+          </form>
+          <p data-preview-cart hidden></p>
+        </div>
+      </div>
+      <script type="application/json" data-sofa-models>[]</script>
+    </div>
+    <script type="module" src="boot.js"></script>
+  </body>
+</html>

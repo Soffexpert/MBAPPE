@@ -1,0 +1,90 @@
+{
+  "sections": {
+    "main": {
+      "type": "sofa-3d",
+      "settings": {
+        "material_names": "tyg, fabric, upholstery, cloth, textile, seat, cushion, textil",
+        "show_description": true,
+        "padding_top": 24,
+        "padding_bottom": 36
+      },
+      "blocks": {
+        "manchester_svart": {
+          "type": "swatch",
+          "settings": {
+            "fabric": "Manchester",
+            "color": "Svart",
+            "fallback_color": "#2a2a2a"
+          }
+        },
+        "manchester_gra": {
+          "type": "swatch",
+          "settings": {
+            "fabric": "Manchester",
+            "color": "Grå",
+            "fallback_color": "#969698"
+          }
+        },
+        "manchester_beige": {
+          "type": "swatch",
+          "settings": {
+            "fabric": "Manchester",
+            "color": "Beige",
+            "fallback_color": "#ceb89c"
+          }
+        },
+        "manchester_bla": {
+          "type": "swatch",
+          "settings": {
+            "fabric": "Manchester",
+            "color": "Blå",
+            "fallback_color": "#244470"
+          }
+        },
+        "sammet_svart": {
+          "type": "swatch",
+          "settings": {
+            "fabric": "Sammet",
+            "color": "Svart",
+            "fallback_color": "#1c1c1e"
+          }
+        },
+        "sammet_gron": {
+          "type": "swatch",
+          "settings": {
+            "fabric": "Sammet",
+            "color": "Grön",
+            "fallback_color": "#244a3a"
+          }
+        },
+        "sammet_beige": {
+          "type": "swatch",
+          "settings": {
+            "fabric": "Sammet",
+            "color": "Beige",
+            "fallback_color": "#d6c4a8"
+          }
+        },
+        "sammet_rost": {
+          "type": "swatch",
+          "settings": {
+            "fabric": "Sammet",
+            "color": "Rost",
+            "fallback_color": "#96402e"
+          }
+        }
+      },
+      "block_order": [
+        "manchester_svart",
+        "manchester_gra",
+        "manchester_beige",
+        "manchester_bla",
+        "sammet_svart",
+        "sammet_gron",
+        "sammet_beige",
+        "sammet_rost"
+      ]
+    }
+  },
+  "order": ["main"]
+}

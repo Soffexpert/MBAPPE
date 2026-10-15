@@ -1,0 +1,16 @@
+{
+  "sofa_3d": {
+    "fabrics": "Fabric",
+    "choose_fabric": "Choose a fabric to see the colors.",
+    "choose_color": "Choose a color.",
+    "now_showing": "The 3D model now shows __COLOR__ __FABRIC__.",
+    "loading": "Loading the fabric on the 3D model.",
+    "add_to_cart": "Add to cart",
+    "sold_out": "Sold out",
+    "missing_model": "Upload a 3D model on the product. It is shown on the left.",
+    "missing_swatches": "Add fabric colors in the theme editor. Each color is an image you upload.",
+    "property_fabric": "Fabric",
+    "property_color": "Color",
+    "image_error": "The fabric image could not be applied. The choice is still saved on the order."
+  }
+}
