@@ -1,0 +1,16 @@
+{
+  "sofa_3d": {
+    "fabrics": "Tyg",
+    "choose_fabric": "Välj ett tyg för att se färgerna.",
+    "choose_color": "Välj en färg.",
+    "now_showing": "3D-modellen visar nu __COLOR__ __FABRIC__.",
+    "loading": "Laddar tyget på 3D-modellen.",
+    "add_to_cart": "Lägg i varukorg",
+    "sold_out": "Slutsåld",
+    "missing_model": "Ladda upp en 3D-modell på produkten. Den visas till vänster.",
+    "missing_swatches": "Lägg till tygfärger i temaredigeraren. Varje färg är en bild du laddar upp.",
+    "property_fabric": "Tyg",
+    "property_color": "Färg",
+    "image_error": "Tygbilden kunde inte läggas på modellen. Valet sparas ändå på beställningen."
+  }
+}

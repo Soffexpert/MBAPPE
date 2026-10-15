@@ -1,0 +1,834 @@
+{% comment %}KLART-UTAN-FEL{% endcomment %}
+{% liquid
+  assign models = product.media | where: 'media_type', 'model'
+  assign base_model = models | first
+  assign current_variant = product.selected_or_first_available_variant
+%}
+
+<div
+  class="sofa-3d"
+  id="Sofa3d-{{ section.id }}"
+  style="--sofa-pad-top: {{ section.settings.padding_top }}px; --sofa-pad-bottom: {{ section.settings.padding_bottom }}px;"
+  data-sofa-3d
+  data-material-names="{{ section.settings.material_names | escape }}"
+  data-status-choose-fabric="Välj ett tyg för att se färgerna."
+  data-status-choose-color="Välj en färg."
+  data-status-showing="3D-modellen visar nu __COLOR__ __FABRIC__."
+  data-status-loading="Laddar tyget på 3D-modellen."
+  data-status-missing-model="Ladda upp en 3D-modell på produkten. Den visas till vänster."
+  data-status-image-error="Tygbilden kunde inte läggas på modellen. Valet sparas ändå på beställningen."
+>
+  <div class="sofa-3d__layout">
+    <div class="sofa-3d__stage" data-sofa-stage>
+      {% if base_model %}
+        {{ base_model | model_viewer_tag: interaction-policy: 'allow-when-focused', alt: product.title }}
+      {% else %}
+        <div class="sofa-3d__empty">
+          <p>Ladda upp en 3D-modell på produkten. Den visas till vänster.</p>
+        </div>
+      {% endif %}
+    </div>
+
+    <div class="sofa-3d__panel">
+      <h1 class="sofa-3d__title">{{ product.title | escape }}</h1>
+      {% if current_variant %}
+        <p class="sofa-3d__price">
+          {% if current_variant.compare_at_price > current_variant.price %}
+            <s class="sofa-3d__compare">{{ current_variant.compare_at_price | money }}</s>
+          {% endif %}
+          <span>{{ current_variant.price | money }}</span>
+        </p>
+      {% endif %}
+
+      <h2 class="sofa-3d__label">Tyg</h2>
+      <div class="sofa-3d__fabrics" role="group" aria-label="Tyg">
+        {% assign seen_fabrics = '|' %}
+        {% for block in section.blocks %}
+          {% assign fabric_label = block.settings.fabric | strip %}
+          {% assign fabric_handle = fabric_label | handleize %}
+          {% assign seen_token = '|' | append: fabric_handle | append: '|' %}
+          {% if fabric_label != blank %}
+            {% unless seen_fabrics contains seen_token %}
+              <button
+                type="button"
+                class="sofa-3d__fabric"
+                data-fabric-button
+                data-fabric="{{ fabric_handle }}"
+                aria-expanded="{% if request.design_mode %}true{% else %}false{% endif %}"
+                aria-controls="SofaColors-{{ section.id }}"
+              >
+                {{ fabric_label | escape }}
+              </button>
+              {% assign seen_fabrics = seen_fabrics | append: fabric_handle | append: '|' %}
+            {% endunless %}
+          {% endif %}
+        {% endfor %}
+      </div>
+
+      {% if section.blocks.size == 0 %}
+        <p class="sofa-3d__hint">Lägg till tygfärger i temaredigeraren. Varje färg är en bild du laddar upp.</p>
+      {% endif %}
+
+      <div
+        class="sofa-3d__colors"
+        id="SofaColors-{{ section.id }}"
+        data-sofa-colors
+        {% unless request.design_mode %}
+          hidden
+        {% endunless %}
+      >
+        <div class="sofa-3d__swatches" role="group" aria-label="Välj en färg.">
+          {% for block in section.blocks %}
+            {% assign fabric_label = block.settings.fabric | strip %}
+            {% assign fabric_handle = fabric_label | handleize %}
+            {% assign swatch_color = block.settings.color | strip %}
+            {% if fabric_label != blank %}
+              <button
+                type="button"
+                class="sofa-3d__swatch"
+                data-swatch
+                data-fabric="{{ fabric_handle }}"
+                data-fabric-label="{{ fabric_label | escape }}"
+                data-color="{{ swatch_color | escape }}"
+                data-fallback="{{ block.settings.fallback_color }}"
+                data-model-alt="{{ block.settings.model_alt | escape }}"
+                {% if block.settings.image %}
+                  data-image="{{ block.settings.image | image_url: width: 1024 }}"
+                {% endif %}
+                aria-pressed="false"
+                aria-label="{{ swatch_color | escape }} {{ fabric_label | escape }}"
+                {% unless request.design_mode %}
+                  hidden
+                {% endunless %}
+                {{ block.shopify_attributes }}
+              >
+                <span class="sofa-3d__swatch-media">
+                  {% if block.settings.image %}
+                    {{
+                      block.settings.image
+                      | image_url: width: 320
+                      | image_tag:
+                        alt: '',
+                        loading: 'lazy',
+                        width: 160,
+                        height: 160,
+                        class: 'sofa-3d__swatch-image'
+                    }}
+                  {% else %}
+                    <span
+                      class="sofa-3d__swatch-fallback"
+                      style="background: {{ block.settings.fallback_color }};"
+                    ></span>
+                  {% endif %}
+                </span>
+                <span class="sofa-3d__swatch-name">
+                  {% if request.design_mode %}{{ fabric_label | escape }} · {% endif %}
+                  {{ swatch_color | escape }}
+                </span>
+              </button>
+            {% endif %}
+          {% endfor %}
+        </div>
+      </div>
+
+      <p class="sofa-3d__status" data-sofa-status aria-live="polite">Välj ett tyg för att se färgerna.</p>
+
+      {% if current_variant %}
+        {% assign sofa_form_id = 'SofaForm-' | append: section.id %}
+        {% form 'product', product, id: sofa_form_id %}
+          <input type="hidden" name="id" value="{{ current_variant.id }}">
+          <input type="hidden" name="quantity" value="1">
+          <input
+            type="hidden"
+            name="properties[Tyg]"
+            value=""
+            data-sofa-property="fabric"
+          >
+          <input
+            type="hidden"
+            name="properties[Färg]"
+            value=""
+            data-sofa-property="color"
+          >
+          {{ form.errors | default_errors }}
+          <button
+            type="submit"
+            name="add"
+            class="sofa-3d__submit"
+            {% unless current_variant.available %}
+              disabled
+            {% endunless %}
+          >
+            {% if current_variant.available %}
+              Lägg i varukorg
+            {% else %}
+              Slutsåld
+            {% endif %}
+          </button>
+        {% endform %}
+      {% endif %}
+
+      {% if section.settings.show_description and product.description != blank %}
+        <div class="sofa-3d__description rte">{{ product.description }}</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <script type="application/json" data-sofa-models>
+    [
+      {%- assign emitted = false -%}
+      {%- for media in models -%}
+        {%- for source in media.sources -%}
+          {%- assign source_format = source.format | downcase -%}
+          {%- if source_format == 'glb' -%}
+            {%- if emitted -%},{%- endif -%}
+            {%- assign emitted = true -%}
+            {"alt":{{ media.alt | json }},"src":{{ source.url | json }}}
+          {%- endif -%}
+        {%- endfor -%}
+      {%- endfor -%}
+    ]
+  </script>
+</div>
+
+{% stylesheet %}
+  .sofa-3d {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: var(--sofa-pad-top, 24px) 20px var(--sofa-pad-bottom, 36px);
+    color: #1c1b19;
+  }
+
+  .sofa-3d__layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
+    gap: 40px;
+    align-items: start;
+  }
+
+  .sofa-3d__stage {
+    background: #f4f1ec;
+    border-radius: 18px;
+    overflow: hidden;
+    min-height: 420px;
+  }
+
+  .sofa-3d__stage model-viewer {
+    width: 100%;
+    height: min(78vh, 760px);
+    min-height: 420px;
+    background: transparent;
+    transition: opacity 180ms ease;
+  }
+
+  .sofa-3d__stage.is-updating model-viewer {
+    opacity: 0.4;
+  }
+
+  .sofa-3d__empty {
+    min-height: 420px;
+    display: grid;
+    place-items: center;
+    padding: 32px;
+    text-align: center;
+    color: #4a463f;
+  }
+
+  .sofa-3d__title {
+    margin: 0 0 8px;
+    font-size: clamp(1.6rem, 2vw, 2.2rem);
+    line-height: 1.15;
+  }
+
+  .sofa-3d__price {
+    display: flex;
+    gap: 12px;
+    align-items: baseline;
+    margin: 0;
+    font-size: 1.25rem;
+  }
+
+  .sofa-3d__compare {
+    color: #8a847c;
+    text-decoration: line-through;
+    font-size: 1rem;
+  }
+
+  .sofa-3d__label {
+    margin: 28px 0 0;
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #6f6a64;
+  }
+
+  .sofa-3d__fabrics {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 22px;
+    margin: 8px 0 18px;
+  }
+
+  .sofa-3d__fabric {
+    appearance: none;
+    background: transparent;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    padding: 10px 0 8px;
+    font: inherit;
+    font-size: 1.05rem;
+    color: #6f6a64;
+    cursor: pointer;
+  }
+
+  .sofa-3d__fabric[aria-expanded='true'] {
+    color: #1a1a1a;
+    border-bottom-color: #1a1a1a;
+  }
+
+  .sofa-3d__colors[hidden],
+  .sofa-3d__swatch[hidden] {
+    display: none;
+  }
+
+  .sofa-3d__editor-label {
+    margin: 0 0 8px;
+    font-size: 0.8rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #6f6a64;
+  }
+
+  .sofa-3d__swatches {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
+    gap: 12px;
+  }
+
+  .sofa-3d__swatch {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    font: inherit;
+    color: inherit;
+    text-align: center;
+    cursor: pointer;
+  }
+
+  .sofa-3d__swatch-media {
+    aspect-ratio: 1;
+    border-radius: 10px;
+    overflow: hidden;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    background: #f4f1ec;
+  }
+
+  .sofa-3d__swatch-image,
+  .sofa-3d__swatch-fallback {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .sofa-3d__swatch-name {
+    font-size: 0.85rem;
+  }
+
+  .sofa-3d__swatch[aria-pressed='true'] .sofa-3d__swatch-media {
+    box-shadow: 0 0 0 2px #fff, 0 0 0 4px #1a1a1a;
+  }
+
+  .sofa-3d__status {
+    min-height: 1.4em;
+    margin: 16px 0;
+    color: #4a463f;
+  }
+
+  .sofa-3d__hint {
+    color: #4a463f;
+  }
+
+  .sofa-3d__submit {
+    width: 100%;
+    min-height: 52px;
+    border: 0;
+    border-radius: 999px;
+    background: #1a1a1a;
+    color: #fff;
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .sofa-3d__submit:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  .sofa-3d__description {
+    margin-top: 28px;
+  }
+
+  .sofa-3d__fabric:focus-visible,
+  .sofa-3d__swatch:focus-visible,
+  .sofa-3d__submit:focus-visible {
+    outline: 2px solid #1a1a1a;
+    outline-offset: 3px;
+  }
+
+  @media (min-width: 750px) {
+    .sofa-3d__panel {
+      position: sticky;
+      top: 24px;
+    }
+  }
+
+  @media (max-width: 749px) {
+    .sofa-3d__layout {
+      grid-template-columns: 1fr;
+      gap: 24px;
+    }
+
+    .sofa-3d__stage model-viewer,
+    .sofa-3d__empty,
+    .sofa-3d__stage {
+      height: auto;
+      min-height: 320px;
+    }
+
+    .sofa-3d__stage model-viewer {
+      height: min(62vh, 520px);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .sofa-3d__stage model-viewer {
+      transition: none;
+    }
+  }
+{% endstylesheet %}
+
+{% javascript %}
+  const SKIP_MATERIALS = ['wood', 'metal', 'leg', 'steel', 'chrome', 'ben', 'iron', 'brass', 'gold', 'frame', 'stomme', 'trä', 'tra', 'plast'];
+
+  function bootSofas(scope) {
+    const roots = scope && scope.matches && scope.matches('[data-sofa-3d]')
+      ? [scope]
+      : Array.from((scope || document).querySelectorAll('[data-sofa-3d]'));
+    roots.forEach(initSofa);
+  }
+
+  function initSofa(root) {
+    if (root.dataset.sofaReady === 'true') return;
+    root.dataset.sofaReady = 'true';
+
+    const stage = root.querySelector('[data-sofa-stage]');
+    const viewer = stage ? stage.querySelector('model-viewer') : null;
+    const status = root.querySelector('[data-sofa-status]');
+    const form = root.querySelector('form');
+    const modelsNode = root.querySelector('[data-sofa-models]');
+    let models = [];
+    if (modelsNode) {
+      try {
+        models = JSON.parse(modelsNode.textContent);
+      } catch (error) {
+        models = [];
+      }
+    }
+    const hints = (root.dataset.materialNames || '')
+      .split(',')
+      .map((name) => name.trim().toLowerCase())
+      .filter(Boolean);
+    const baseSrc = viewer ? viewer.getAttribute('src') || '' : '';
+    let applyToken = 0;
+
+    if (viewer) {
+      viewer.shadowIntensity = 1;
+    }
+
+    root.querySelectorAll('[data-fabric-button]').forEach((button) => {
+      button.addEventListener('click', () => {
+        selectFabric(button.dataset.fabric);
+      });
+    });
+
+    root.querySelectorAll('[data-swatch]').forEach((button) => {
+      button.addEventListener('click', () => {
+        root.querySelectorAll('[data-swatch]').forEach((swatch) => {
+          swatch.setAttribute('aria-pressed', swatch === button ? 'true' : 'false');
+        });
+        selectFabric(button.dataset.fabric);
+        setProperties(button);
+        applySwatch(button);
+      });
+    });
+
+    if (form) {
+      form.addEventListener('submit', (event) => {
+        const selected = root.querySelector('[data-swatch][aria-pressed="true"]');
+        if (!selected) {
+          event.preventDefault();
+          if (status) status.textContent = root.dataset.statusChooseColor || '';
+          return;
+        }
+        setProperties(selected);
+      });
+    }
+
+    function selectFabric(handle) {
+      root.querySelectorAll('[data-fabric-button]').forEach((button) => {
+        const open = button.dataset.fabric === handle;
+        button.setAttribute('aria-expanded', open ? 'true' : 'false');
+      });
+      const colors = root.querySelector('[data-sofa-colors]');
+      if (colors) colors.removeAttribute('hidden');
+      root.querySelectorAll('[data-swatch]').forEach((swatch) => {
+        if (swatch.dataset.fabric === handle) swatch.removeAttribute('hidden');
+        else swatch.setAttribute('hidden', '');
+      });
+      const selectedHere = Array.from(root.querySelectorAll('[data-swatch][aria-pressed="true"]')).find(
+        (swatch) => swatch.dataset.fabric === handle
+      );
+      if (status && !selectedHere) status.textContent = root.dataset.statusChooseColor || '';
+    }
+
+    function setProperties(button) {
+      const fabricInput = root.querySelector('[data-sofa-property="fabric"]');
+      const colorInput = root.querySelector('[data-sofa-property="color"]');
+      if (fabricInput) fabricInput.value = button.dataset.fabricLabel || '';
+      if (colorInput) colorInput.value = button.dataset.color || '';
+    }
+
+    async function applySwatch(button) {
+      const token = ++applyToken;
+      if (!viewer) {
+        if (status) status.textContent = root.dataset.statusMissingModel || '';
+        return;
+      }
+      if (stage) stage.classList.add('is-updating');
+      if (status) status.textContent = root.dataset.statusLoading || '';
+      try {
+        await customElements.whenDefined('model-viewer');
+        const colorModel = findColorModel(models, button, baseSrc);
+        if (colorModel) {
+          await setSrc(viewer, colorModel.src);
+        } else {
+          if (baseSrc) await setSrc(viewer, baseSrc);
+          await paint(viewer, button.dataset.image || '', button.dataset.fallback || '#cccccc', hints);
+        }
+        if (token !== applyToken) return;
+        if (status) {
+          status.textContent = (root.dataset.statusShowing || '')
+            .replace('__COLOR__', button.dataset.color || '')
+            .replace('__FABRIC__', button.dataset.fabricLabel || '');
+        }
+      } catch (error) {
+        if (token !== applyToken) return;
+        if (status) status.textContent = root.dataset.statusImageError || '';
+      } finally {
+        if (token === applyToken && stage) stage.classList.remove('is-updating');
+      }
+    }
+  }
+
+  function absUrl(url) {
+    if (!url) return '';
+    if (url.startsWith('//')) return window.location.protocol + url;
+    return url;
+  }
+
+  function sameUrl(a, b) {
+    return absUrl(a) === absUrl(b);
+  }
+
+  function findColorModel(models, button, baseSrc) {
+    const explicit = (button.dataset.modelAlt || '').trim().toLowerCase();
+    const pair = ((button.dataset.fabricLabel || '') + ' ' + (button.dataset.color || '')).trim().toLowerCase();
+    const piped = ((button.dataset.fabricLabel || '') + '|' + (button.dataset.color || '')).trim().toLowerCase();
+    return models.find((model) => {
+      const alt = (model.alt || '').trim().toLowerCase();
+      if (!alt) return false;
+      if (explicit && alt === explicit) return true;
+      if (sameUrl(model.src, baseSrc)) return false;
+      return alt === pair || alt === piped;
+    });
+  }
+
+  function setSrc(viewer, src) {
+    const next = absUrl(src);
+    if (!next) return Promise.resolve();
+    if (sameUrl(viewer.getAttribute('src'), next) && viewer.loaded && viewer.model) {
+      return Promise.resolve();
+    }
+    return new Promise((resolve, reject) => {
+      const onLoad = () => {
+        cleanup();
+        resolve();
+      };
+      const onError = () => {
+        cleanup();
+        reject(new Error('model'));
+      };
+      const cleanup = () => {
+        viewer.removeEventListener('load', onLoad);
+        viewer.removeEventListener('error', onError);
+      };
+      viewer.addEventListener('load', onLoad);
+      viewer.addEventListener('error', onError);
+      viewer.src = next;
+    });
+  }
+
+  function hexToFactor(hex) {
+    const value = (hex || '#cccccc').replace('#', '');
+    const full = value.length === 3 ? value.split('').map((part) => part + part).join('') : value;
+    const num = parseInt(full, 16);
+    if (Number.isNaN(num)) return [0.8, 0.8, 0.8, 1];
+    return [((num >> 16) & 255) / 255, ((num >> 8) & 255) / 255, (num & 255) / 255, 1];
+  }
+
+  function loadImage(url) {
+    return new Promise((resolve, reject) => {
+      const image = new Image();
+      image.crossOrigin = 'anonymous';
+      image.onload = () => resolve(image);
+      image.onerror = () => reject(new Error('image'));
+      image.src = url;
+    });
+  }
+
+  async function makeTexture(viewer, imageUrl, fallback) {
+    const canvas = document.createElement('canvas');
+    const size = 512;
+    canvas.width = size;
+    canvas.height = size;
+    const context = canvas.getContext('2d');
+    let drewImage = false;
+    if (imageUrl) {
+      try {
+        const image = await loadImage(absUrl(imageUrl));
+        const tile = 128;
+        for (let y = 0; y < size; y += tile) {
+          for (let x = 0; x < size; x += tile) {
+            context.drawImage(image, x, y, tile, tile);
+          }
+        }
+        drewImage = true;
+      } catch (error) {
+        drewImage = false;
+      }
+    }
+    if (!drewImage) {
+      context.fillStyle = fallback || '#cccccc';
+      context.fillRect(0, 0, size, size);
+    }
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+    const url = URL.createObjectURL(blob);
+    return viewer.createTexture(url);
+  }
+
+  async function paint(viewer, imageUrl, fallback, hints) {
+    if (!viewer.model) throw new Error('model');
+    const materials = viewer.model.materials || [];
+    const named = materials.filter((material) =>
+      hints.some((hint) => (material.name || '').toLowerCase().includes(hint))
+    );
+    const safe = materials.filter(
+      (material) => !SKIP_MATERIALS.some((word) => (material.name || '').toLowerCase().includes(word))
+    );
+    const targets = named.length ? named : safe.length ? safe : materials;
+    let texture = null;
+    try {
+      texture = await makeTexture(viewer, imageUrl, fallback);
+    } catch (error) {
+      texture = null;
+    }
+    const tint = hexToFactor(fallback);
+    for (const material of targets) {
+      const pbr = material.pbrMetallicRoughness;
+      if (!pbr) continue;
+      if (typeof pbr.setMetallicFactor === 'function') pbr.setMetallicFactor(0);
+      if (typeof pbr.setRoughnessFactor === 'function') pbr.setRoughnessFactor(0.92);
+      const info = pbr.baseColorTexture;
+      if (texture && info && typeof info.setTexture === 'function') {
+        if (typeof pbr.setBaseColorFactor === 'function') pbr.setBaseColorFactor([1, 1, 1, 1]);
+        info.setTexture(texture);
+      } else if (typeof pbr.setBaseColorFactor === 'function') {
+        pbr.setBaseColorFactor(tint);
+      }
+    }
+    if (!texture) throw new Error('texture');
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => bootSofas(document));
+  } else {
+    bootSofas(document);
+  }
+
+  document.addEventListener('shopify:section:load', (event) => {
+    bootSofas(event.target);
+  });
+{% endjavascript %}
+
+{% schema %}
+{
+  "name": "Soffa 3D och tyg",
+  "tag": "section",
+  "class": "sofa-3d-section",
+  "enabled_on": {
+    "templates": ["product"]
+  },
+  "settings": [
+    {
+      "type": "paragraph",
+      "content": "Ladda upp en GLB som 3D-media på produkten och döp tygmaterialet till Tyg. Varje block är en färgbild. Klick på bilden byter tyg på modellen. Ben, wood och metal lämnas orörda."
+    },
+    {
+      "type": "text",
+      "id": "material_names",
+      "label": "Materialnamn som ska byta tyg",
+      "default": "tyg, fabric, upholstery, cloth, textile, seat, cushion, textil"
+    },
+    {
+      "type": "checkbox",
+      "id": "show_description",
+      "label": "Visa produktbeskrivning",
+      "default": true
+    },
+    {
+      "type": "range",
+      "id": "padding_top",
+      "min": 0,
+      "max": 100,
+      "step": 4,
+      "unit": "px",
+      "label": "Avstånd upptill",
+      "default": 24
+    },
+    {
+      "type": "range",
+      "id": "padding_bottom",
+      "min": 0,
+      "max": 100,
+      "step": 4,
+      "unit": "px",
+      "label": "Avstånd nertill",
+      "default": 36
+    }
+  ],
+  "blocks": [
+    {
+      "type": "swatch",
+      "name": "Tygfärg",
+      "settings": [
+        {
+          "type": "text",
+          "id": "fabric",
+          "label": "Tyg",
+          "default": "Manchester"
+        },
+        {
+          "type": "text",
+          "id": "color",
+          "label": "Färg",
+          "default": "Svart"
+        },
+        {
+          "type": "image_picker",
+          "id": "image",
+          "label": "Bild på tyget"
+        },
+        {
+          "type": "color",
+          "id": "fallback_color",
+          "label": "Färgprov innan bild är uppladdad",
+          "default": "#1a1a1a"
+        },
+        {
+          "type": "text",
+          "id": "model_alt",
+          "label": "Alt-text på en egen 3D-modell",
+          "info": "Lämna tom om tygbilden ska läggas på soffans modell. Fyll i om du laddat upp en egen GLB för just den här färgen."
+        }
+      ]
+    }
+  ],
+  "presets": [
+    {
+      "name": "Soffa 3D och tyg",
+      "blocks": [
+        {
+          "type": "swatch",
+          "settings": {
+            "fabric": "Manchester",
+            "color": "Svart",
+            "fallback_color": "#2a2a2a"
+          }
+        },
+        {
+          "type": "swatch",
+          "settings": {
+            "fabric": "Manchester",
+            "color": "Grå",
+            "fallback_color": "#969698"
+          }
+        },
+        {
+          "type": "swatch",
+          "settings": {
+            "fabric": "Manchester",
+            "color": "Beige",
+            "fallback_color": "#ceb89c"
+          }
+        },
+        {
+          "type": "swatch",
+          "settings": {
+            "fabric": "Manchester",
+            "color": "Blå",
+            "fallback_color": "#244470"
+          }
+        },
+        {
+          "type": "swatch",
+          "settings": {
+            "fabric": "Sammet",
+            "color": "Svart",
+            "fallback_color": "#1c1c1e"
+          }
+        },
+        {
+          "type": "swatch",
+          "settings": {
+            "fabric": "Sammet",
+            "color": "Grön",
+            "fallback_color": "#244a3a"
+          }
+        },
+        {
+          "type": "swatch",
+          "settings": {
+            "fabric": "Sammet",
+            "color": "Beige",
+            "fallback_color": "#d6c4a8"
+          }
+        },
+        {
+          "type": "swatch",
+          "settings": {
+            "fabric": "Sammet",
+            "color": "Rost",
+            "fallback_color": "#96402e"
+          }
+        }
+      ]
+    }
+  ]
+}
+{% endschema %}
