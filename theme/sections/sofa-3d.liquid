@@ -1,64 +1,4 @@
 {% liquid
-  assign t_fabrics = 'sofa_3d.fabrics' | t
-  if t_fabrics == 'sofa_3d.fabrics' or t_fabrics contains 'translation missing'
-    assign t_fabrics = 'Tyg'
-  endif
-
-  assign t_choose_fabric = 'sofa_3d.choose_fabric' | t
-  if t_choose_fabric == 'sofa_3d.choose_fabric' or t_choose_fabric contains 'translation missing'
-    assign t_choose_fabric = 'Välj ett tyg för att se färgerna.'
-  endif
-
-  assign t_choose_color = 'sofa_3d.choose_color' | t
-  if t_choose_color == 'sofa_3d.choose_color' or t_choose_color contains 'translation missing'
-    assign t_choose_color = 'Välj en färg.'
-  endif
-
-  assign t_showing = 'sofa_3d.now_showing' | t
-  if t_showing == 'sofa_3d.now_showing' or t_showing contains 'translation missing'
-    assign t_showing = '3D-modellen visar nu __COLOR__ __FABRIC__.'
-  endif
-
-  assign t_loading = 'sofa_3d.loading' | t
-  if t_loading == 'sofa_3d.loading' or t_loading contains 'translation missing'
-    assign t_loading = 'Laddar tyget på 3D-modellen.'
-  endif
-
-  assign t_add = 'sofa_3d.add_to_cart' | t
-  if t_add == 'sofa_3d.add_to_cart' or t_add contains 'translation missing'
-    assign t_add = 'Lägg i varukorg'
-  endif
-
-  assign t_sold_out = 'sofa_3d.sold_out' | t
-  if t_sold_out == 'sofa_3d.sold_out' or t_sold_out contains 'translation missing'
-    assign t_sold_out = 'Slutsåld'
-  endif
-
-  assign t_missing_model = 'sofa_3d.missing_model' | t
-  if t_missing_model == 'sofa_3d.missing_model' or t_missing_model contains 'translation missing'
-    assign t_missing_model = 'Ladda upp en 3D-modell på produkten. Den visas till vänster.'
-  endif
-
-  assign t_missing_swatches = 'sofa_3d.missing_swatches' | t
-  if t_missing_swatches == 'sofa_3d.missing_swatches' or t_missing_swatches contains 'translation missing'
-    assign t_missing_swatches = 'Lägg till tygfärger i temaredigeraren. Varje färg är en bild du laddar upp.'
-  endif
-
-  assign t_property_fabric = 'sofa_3d.property_fabric' | t
-  if t_property_fabric == 'sofa_3d.property_fabric' or t_property_fabric contains 'translation missing'
-    assign t_property_fabric = 'Tyg'
-  endif
-
-  assign t_property_color = 'sofa_3d.property_color' | t
-  if t_property_color == 'sofa_3d.property_color' or t_property_color contains 'translation missing'
-    assign t_property_color = 'Färg'
-  endif
-
-  assign t_image_error = 'sofa_3d.image_error' | t
-  if t_image_error == 'sofa_3d.image_error' or t_image_error contains 'translation missing'
-    assign t_image_error = 'Tygbilden kunde inte läggas på modellen. Valet sparas ändå på beställningen.'
-  endif
-
   assign models = product.media | where: 'media_type', 'model'
   assign base_model = models | first
   assign current_variant = product.selected_or_first_available_variant
@@ -70,12 +10,12 @@
   style="--sofa-pad-top: {{ section.settings.padding_top }}px; --sofa-pad-bottom: {{ section.settings.padding_bottom }}px;"
   data-sofa-3d
   data-material-names="{{ section.settings.material_names | escape }}"
-  data-status-choose-fabric="{{ t_choose_fabric | escape }}"
-  data-status-choose-color="{{ t_choose_color | escape }}"
-  data-status-showing="{{ t_showing | escape }}"
-  data-status-loading="{{ t_loading | escape }}"
-  data-status-missing-model="{{ t_missing_model | escape }}"
-  data-status-image-error="{{ t_image_error | escape }}"
+  data-status-choose-fabric="Välj ett tyg för att se färgerna."
+  data-status-choose-color="Välj en färg."
+  data-status-showing="3D-modellen visar nu __COLOR__ __FABRIC__."
+  data-status-loading="Laddar tyget på 3D-modellen."
+  data-status-missing-model="Ladda upp en 3D-modell på produkten. Den visas till vänster."
+  data-status-image-error="Tygbilden kunde inte läggas på modellen. Valet sparas ändå på beställningen."
 >
   <div class="sofa-3d__layout">
     <div class="sofa-3d__stage" data-sofa-stage>
@@ -83,7 +23,7 @@
         {{ base_model | model_viewer_tag: interaction-policy: 'allow-when-focused', alt: product.title }}
       {% else %}
         <div class="sofa-3d__empty">
-          <p>{{ t_missing_model }}</p>
+          <p>Ladda upp en 3D-modell på produkten. Den visas till vänster.</p>
         </div>
       {% endif %}
     </div>
@@ -99,8 +39,8 @@
         </p>
       {% endif %}
 
-      <h2 class="sofa-3d__label">{{ t_fabrics }}</h2>
-      <div class="sofa-3d__fabrics" role="group" aria-label="{{ t_fabrics | escape }}">
+      <h2 class="sofa-3d__label">Tyg</h2>
+      <div class="sofa-3d__fabrics" role="group" aria-label="Tyg">
         {% assign seen_fabrics = '|' %}
         {% for block in section.blocks %}
           {% assign fabric_label = block.settings.fabric | strip %}
@@ -125,7 +65,7 @@
       </div>
 
       {% if section.blocks.size == 0 %}
-        <p class="sofa-3d__hint">{{ t_missing_swatches }}</p>
+        <p class="sofa-3d__hint">Lägg till tygfärger i temaredigeraren. Varje färg är en bild du laddar upp.</p>
       {% endif %}
 
       <div
@@ -136,7 +76,7 @@
           hidden
         {% endunless %}
       >
-        <div class="sofa-3d__swatches" role="group" aria-label="{{ t_choose_color | escape }}">
+        <div class="sofa-3d__swatches" role="group" aria-label="Välj en färg.">
           {% for block in section.blocks %}
             {% assign fabric_label = block.settings.fabric | strip %}
             {% assign fabric_handle = fabric_label | handleize %}
@@ -190,7 +130,7 @@
         </div>
       </div>
 
-      <p class="sofa-3d__status" data-sofa-status aria-live="polite">{{ t_choose_fabric }}</p>
+      <p class="sofa-3d__status" data-sofa-status aria-live="polite">Välj ett tyg för att se färgerna.</p>
 
       {% if current_variant %}
         {% assign sofa_form_id = 'SofaForm-' | append: section.id %}
@@ -199,13 +139,13 @@
           <input type="hidden" name="quantity" value="1">
           <input
             type="hidden"
-            name="properties[{{ t_property_fabric | escape }}]"
+            name="properties[Tyg]"
             value=""
             data-sofa-property="fabric"
           >
           <input
             type="hidden"
-            name="properties[{{ t_property_color | escape }}]"
+            name="properties[Färg]"
             value=""
             data-sofa-property="color"
           >
@@ -219,9 +159,9 @@
             {% endunless %}
           >
             {% if current_variant.available %}
-              {{ t_add }}
+              Lägg i varukorg
             {% else %}
-              {{ t_sold_out }}
+              Slutsåld
             {% endif %}
           </button>
         {% endform %}
